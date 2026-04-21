@@ -1,7 +1,0 @@
-packages:
-  - 'packages/*'
-  - 'tests/*'
-onlyBuiltDependencies:
-  - esbuild
-  - svelte-preprocess
-  - unrs-resolver
