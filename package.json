@@ -11,8 +11,8 @@
     "npm": ">=11.0.0"
   },
   "scripts": {
-    "build": "concurrently \"npm run -w packages/frontend build\" \"npm run -w packages/backend build\"",
-    "watch": "concurrently \"npm run -w packages/frontend watch\" \"npm run -w packages/backend watch\"",
+    "build": "concurrently \"cd packages/frontend && pnpm run build\" \"cd packages/backend && pnpm run build\"",
+    "watch": "concurrently \"cd packages/frontend && pnpm run watch\" \"cd packages/backend && pnpm run watch\"",
     "format:check": "prettier --check \"**/src/**/*.{ts,svelte}\"",
     "format:fix": "prettier --write \"**/src/**/*.{ts,svelte}\"",
     "lint:check": "eslint . --ext js,ts,tsx",
@@ -21,11 +21,11 @@
     "test:backend": "vitest run -r packages/backend --passWithNoTests --coverage",
     "test:frontend": "vitest -c packages/frontend/vite.config.js run packages/frontend --passWithNoTests --coverage",
     "test:shared": "vitest run -r packages/shared --passWithNoTests --coverage",
-    "test": "npm run test:backend && npm run test:shared && npm run test:frontend",
+    "test": "pnpm run test:backend && pnpm run test:shared && pnpm run test:frontend",
     "typecheck:shared": "tsc --noEmit --project packages/shared",
     "typecheck:frontend": "tsc --noEmit --project packages/frontend",
     "typecheck:backend": "tsc --noEmit --project packages/backend",
-    "typecheck": "npm run typecheck:shared && npm run typecheck:frontend && npm run typecheck:backend"
+    "typecheck": "pnpm run typecheck:shared && pnpm run typecheck:frontend && pnpm run typecheck:backend"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.1.0",
@@ -56,5 +56,5 @@
   "dependencies": {
     "js-yaml": "^4.1.1"
   },
-  "packageManager": "npm@11.0.0+sha512.11dff29565d2297c74e7c594a9762581bde969f0aa5cbe6f5b3644bf008a16c065ece61094d9ffbb81125be38df8e1ba43eb8244b3d30c61eb797e9a2440e3ec"
+  "packageManager": "pnpm@10.33.0"
 }
