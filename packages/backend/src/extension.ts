@@ -20,9 +20,21 @@ import type { ExtensionContext } from '@podman-desktop/api';
 import * as extensionApi from '@podman-desktop/api';
 import fs from 'node:fs';
 import { RpcExtension } from '/@shared/src/messages/MessageProxy';
+import { ContainerService } from './container-service';
+import { ChaosEngine } from './chaos/chaos-engine';
+import { ChaosApiImpl } from './chaos/chaos-api-impl';
+
+let chaosEngine: ChaosEngine | undefined;
 
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   console.log('Starting Chaos Lab extension');
+
+  const containerService = new ContainerService();
+
+  chaosEngine = new ChaosEngine(containerService);
+  extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
+
+  const chaosApiImpl = new ChaosApiImpl(chaosEngine, containerService);
 
   const panel = extensionApi.window.createWebviewPanel('chaos-lab', 'Chaos Lab', {
     localResourceRoots: [extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media')],
@@ -62,10 +74,37 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   panel.webview.html = indexHtml;
 
   const rpcExtension = new RpcExtension(panel.webview);
+  rpcExtension.registerInstance<ChaosApiImpl>(ChaosApiImpl, chaosApiImpl);
+
+  const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
+    await chaosApiImpl.stopAllChaos();
+    await extensionApi.window.showInformationMessage('All chaos operations have been stopped and rolled back.');
+  });
+  extensionContext.subscriptions.push(stopAllCommand);
+
+  const openChaosCommand = extensionApi.commands.registerCommand('chaos-lab.openChaos', async () => {
+    panel.reveal();
+  });
+  extensionContext.subscriptions.push(openChaosCommand);
+
+  const viewUsageCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.viewContainerUsage',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) {
+        console.warn('viewContainerUsage: no container id received');
+        return;
+      }
+      panel.reveal();
+      await panel.webview.postMessage({ type: 'navigate', url: `/chaos/container/${containerId}` });
+    },
+  );
+  extensionContext.subscriptions.push(viewUsageCommand);
 
   console.log('Chaos Lab extension activated');
 }
 
 export async function deactivate(): Promise<void> {
   console.log('Stopping Chaos Lab extension');
+  await chaosEngine?.stopAll();
 }

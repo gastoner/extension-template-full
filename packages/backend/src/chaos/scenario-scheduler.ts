@@ -43,7 +43,9 @@ export class ScenarioScheduler {
   ) {}
 
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns
+      .filter(Boolean)
+      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -62,7 +64,7 @@ export class ScenarioScheduler {
 
     if (scenario.enabled) {
       entry.intervalHandle = setInterval(() => {
-        this.executeAttack(entry).catch((err: unknown) =>
+        this.executeAttack(entry).catch(err =>
           console.error(`Scenario ${scenario.name} attack failed:`, err),
         );
       }, scenario.intervalSec * 1000);
@@ -92,7 +94,7 @@ export class ScenarioScheduler {
 
     if (enabled) {
       entry.intervalHandle = setInterval(() => {
-        this.executeAttack(entry).catch((err: unknown) =>
+        this.executeAttack(entry).catch(err =>
           console.error(`Scenario ${entry.scenario.name} attack failed:`, err),
         );
       }, entry.scenario.intervalSec * 1000);
@@ -224,10 +226,7 @@ export class ScenarioScheduler {
           packetLossPercent: step.packetLossPercent,
           bandwidthKbps: step.bandwidthKbps,
         });
-        entry.affectedContainers.set(`${target.id}-network`, {
-          attackType: 'network-shape',
-          engineId: target.engineId,
-        });
+        entry.affectedContainers.set(`${target.id}-network`, { attackType: 'network-shape', engineId: target.engineId });
         break;
       case 'resource-limit':
         await this.resourceLimiter.applyLimit({
@@ -235,10 +234,7 @@ export class ScenarioScheduler {
           cpuPercent: step.cpuPercent ?? 50,
           memoryMb: step.memoryMb ?? 64,
         });
-        entry.affectedContainers.set(`${target.id}-resources`, {
-          attackType: 'resource-limit',
-          engineId: target.engineId,
-        });
+        entry.affectedContainers.set(`${target.id}-resources`, { attackType: 'resource-limit', engineId: target.engineId });
         break;
       case 'network-disconnect':
         if (step.disconnectNetworks) {
@@ -246,10 +242,7 @@ export class ScenarioScheduler {
             await this.containerService.disconnectFromNetwork(target.id, network);
           }
         }
-        entry.affectedContainers.set(`${target.id}-disconnect`, {
-          attackType: 'network-disconnect',
-          engineId: target.engineId,
-        });
+        entry.affectedContainers.set(`${target.id}-disconnect`, { attackType: 'network-disconnect', engineId: target.engineId });
         break;
     }
   }

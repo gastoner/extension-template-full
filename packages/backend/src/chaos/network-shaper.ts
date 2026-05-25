@@ -27,7 +27,9 @@ export class NetworkShaper {
   constructor(private readonly containerService: ContainerService) {}
 
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns
+      .filter(Boolean)
+      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -36,11 +38,7 @@ export class NetworkShaper {
 
   private async execTc(containerId: string, tcArgs: string[]): Promise<void> {
     await extensionApi.process.exec('podman', [
-      'exec',
-      '--privileged',
-      containerId,
-      'sh',
-      '-c',
+      'exec', '--privileged', containerId, 'sh', '-c',
       `PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin" tc ${tcArgs.join(' ')}`,
     ]);
   }
@@ -60,7 +58,7 @@ export class NetworkShaper {
     if (!hasTc) {
       throw new Error(
         `Container ${rule.containerId} does not have 'tc' (iproute2) installed. ` +
-          'Network shaping requires iproute2 inside the target container.',
+        'Network shaping requires iproute2 inside the target container.',
       );
     }
 
@@ -87,10 +85,7 @@ export class NetworkShaper {
     if (rule.dnsBlock && rule.dnsBlock.length > 0) {
       for (const host of rule.dnsBlock) {
         await extensionApi.process.exec('podman', [
-          'exec',
-          rule.containerId,
-          'sh',
-          '-c',
+          'exec', rule.containerId, 'sh', '-c',
           `echo "127.0.0.1 ${host}" >> /etc/hosts`,
         ]);
       }
@@ -114,10 +109,7 @@ export class NetworkShaper {
       for (const host of rule.dnsBlock) {
         try {
           await extensionApi.process.exec('podman', [
-            'exec',
-            containerId,
-            'sh',
-            '-c',
+            'exec', containerId, 'sh', '-c',
             `sed -i '/127.0.0.1 ${host}/d' /etc/hosts`,
           ]);
         } catch (err: unknown) {

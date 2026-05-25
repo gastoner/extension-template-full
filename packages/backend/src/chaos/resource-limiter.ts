@@ -33,7 +33,9 @@ export class ResourceLimiter {
   constructor(private readonly containerService: ContainerService) {}
 
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns
+      .filter(Boolean)
+      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -67,7 +69,12 @@ export class ResourceLimiter {
     const cpuValue = (limit.cpuPercent / 100).toFixed(2);
     const memValue = `${limit.memoryMb}m`;
 
-    await extensionApi.process.exec('podman', ['update', '--cpus', cpuValue, '--memory', memValue, limit.containerId]);
+    await extensionApi.process.exec('podman', [
+      'update',
+      '--cpus', cpuValue,
+      '--memory', memValue,
+      limit.containerId,
+    ]);
 
     this.activeLimits.set(limit.containerId, limit);
     console.log(`Resource limits applied to ${limit.containerId}: CPU ${cpuValue}, MEM ${memValue}`);

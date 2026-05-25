@@ -75,17 +75,14 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   async stopAllChaos(): Promise<void> {
-    // -------------------------------------------------------------------------
-    // #1: Show a progress task while stopping all chaos
-    // Wrap the call to this.engine.stopAll() inside extensionApi.window.withProgress():
-    //   - location: extensionApi.ProgressLocation.TASK_WIDGET
-    //   - title: 'Stop All Chaos'
-    // Inside the callback, use progress.report({ message }) to show status,
-    // then call this.engine.stopAll(), then report completion with increment: 100.
-    // Bonus: use increment (0–100) in progress.report() to show intermediate progress steps.
-    // Hint: extensionApi.window.withProgress({ location, title }, async (progress) => { ... })
-    // -------------------------------------------------------------------------
-    await this.engine.stopAll();
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: 'Stop All Chaos' },
+      async progress => {
+        progress.report({ message: 'Rolling back all chaos operations...' });
+        await this.engine.stopAll();
+        progress.report({ increment: 100, message: 'All chaos operations stopped' });
+      },
+    );
   }
 
   async createScenario(scenario: Scenario): Promise<void> {
@@ -108,27 +105,93 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   async applyNetworkRule(rule: NetworkRule): Promise<void> {
-    await this.engine.networkShaper.applyRule(rule);
+    const name = await this.resolveContainerName(rule.containerId);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Network Shaping: ${name}` },
+      async progress => {
+        progress.report({ message: 'Applying network rule...' });
+        await this.engine.networkShaper.applyRule(rule);
+        const parts: string[] = [];
+        if (rule.latencyMs) parts.push(`${rule.latencyMs}ms latency`);
+        if (rule.packetLossPercent) parts.push(`${rule.packetLossPercent}% loss`);
+        if (rule.bandwidthKbps) parts.push(`${rule.bandwidthKbps} kbps`);
+        progress.report({ increment: 100, message: parts.join(', ') || 'Applied' });
+      },
+    );
   }
 
   async removeNetworkRule(containerId: string): Promise<void> {
-    await this.engine.networkShaper.removeRule(containerId);
+    const name = await this.resolveContainerName(containerId);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Remove Network Rule: ${name}` },
+      async progress => {
+        progress.report({ message: 'Removing network rule...' });
+        await this.engine.networkShaper.removeRule(containerId);
+        progress.report({ increment: 100, message: 'Network rule removed' });
+      },
+    );
   }
 
   async applyResourceLimit(limit: ResourceLimit): Promise<void> {
-    await this.engine.resourceLimiter.applyLimit(limit);
+    const name = await this.resolveContainerName(limit.containerId);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Resource Limit: ${name}` },
+      async progress => {
+        progress.report({ message: 'Applying resource limit...' });
+        await this.engine.resourceLimiter.applyLimit(limit);
+        progress.report({
+          increment: 100,
+          message: `CPU: ${(limit.cpuPercent / 100).toFixed(2)} cores, RAM: ${limit.memoryMb} MB`,
+        });
+      },
+    );
   }
 
   async removeResourceLimit(containerId: string): Promise<void> {
-    await this.engine.resourceLimiter.removeLimit(containerId);
+    const name = await this.resolveContainerName(containerId);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Restore Resources: ${name}` },
+      async progress => {
+        progress.report({ message: 'Restoring original limits...' });
+        await this.engine.resourceLimiter.removeLimit(containerId);
+        progress.report({ increment: 100, message: 'Original limits restored' });
+      },
+    );
   }
 
   async isolateContainer(rule: IsolationRule): Promise<void> {
-    await this.engine.isolator.isolate(rule);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Isolate: ${rule.containerName}` },
+      async progress => {
+        progress.report({ message: `Applying ${rule.mode} isolation...` });
+        await this.engine.isolator.isolate(rule);
+        const autoRestore = rule.autoRestoreAfterSec
+          ? ` (auto-restore in ${rule.autoRestoreAfterSec}s)`
+          : '';
+        progress.report({ increment: 100, message: `${rule.mode} isolation active${autoRestore}` });
+      },
+    );
   }
 
   async restoreContainer(containerId: string): Promise<void> {
-    await this.engine.isolator.restore(containerId);
+    const name = await this.resolveContainerName(containerId);
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Restore: ${name}` },
+      async progress => {
+        progress.report({ message: 'Restoring container...' });
+        await this.engine.isolator.restore(containerId);
+        progress.report({ increment: 100, message: 'Container restored from isolation' });
+      },
+    );
+  }
+
+  private async resolveContainerName(containerId: string): Promise<string> {
+    try {
+      const containers = await this.containerService.listContainers();
+      return containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12);
+    } catch {
+      return containerId.substring(0, 12);
+    }
   }
 
   async listIsolations(): Promise<IsolationRule[]> {
@@ -148,20 +211,34 @@ export class ChaosApiImpl implements ChaosApi {
       throw new Error(`Unknown tool '${tool}'. Supported: ${Object.keys(TOOL_PACKAGES).join(', ')}`);
     }
 
-    const pm = await this.detectPackageManager(containerId);
-    if (!pm) {
-      throw new Error(`Could not detect a package manager (apt-get, dnf, yum, apk, microdnf) in the container.`);
-    }
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Installing ${tool}` },
+      async progress => {
+        progress.report({ message: `Detecting package manager in container...` });
+        const pm = await this.detectPackageManager(containerId);
+        if (!pm) {
+          throw new Error(
+            `Could not detect a package manager (apt-get, dnf, yum, apk, microdnf) in the container.`,
+          );
+        }
 
-    const pkg = this.resolvePackageName(tool, pm);
-    const installCmd = this.buildInstallCommand(pm, pkg);
-    await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', installCmd]);
+        const pkg = this.resolvePackageName(tool, pm);
+        const installCmd = this.buildInstallCommand(pm, pkg);
+        progress.report({ message: `Running: ${installCmd}` });
+        await extensionApi.process.exec('podman', [
+          'exec', containerId, 'sh', '-c', installCmd,
+        ]);
+        progress.report({ increment: 100, message: `${tool} installed successfully` });
+      },
+    );
   }
 
   private async detectPackageManager(containerId: string): Promise<string | undefined> {
     for (const pm of ['apt-get', 'dnf', 'microdnf', 'yum', 'apk']) {
       try {
-        await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', `command -v ${pm}`]);
+        await extensionApi.process.exec('podman', [
+          'exec', containerId, 'sh', '-c', `command -v ${pm}`,
+        ]);
         return pm;
       } catch {
         // not found, try next
@@ -171,7 +248,8 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   private resolvePackageName(tool: string, pm: string): string {
-    const pmFamily = pm === 'dnf' || pm === 'microdnf' || pm === 'yum' ? 'rpm' : pm === 'apk' ? 'apk' : 'deb';
+    const pmFamily = (pm === 'dnf' || pm === 'microdnf' || pm === 'yum') ? 'rpm' :
+                     (pm === 'apk') ? 'apk' : 'deb';
     return TOOL_PACKAGES[tool]?.[pmFamily] ?? TOOL_PACKAGES[tool]?.deb ?? tool;
   }
 
@@ -193,6 +271,6 @@ export class ChaosApiImpl implements ChaosApi {
 }
 
 const TOOL_PACKAGES: Record<string, Record<string, string>> = {
-  tc: { deb: 'iproute2', rpm: 'iproute-tc', apk: 'iproute2' },
-  iptables: { deb: 'iptables', rpm: 'iptables', apk: 'iptables' },
+  tc:       { deb: 'iproute2', rpm: 'iproute-tc', apk: 'iproute2' },
+  iptables: { deb: 'iptables', rpm: 'iptables',   apk: 'iptables' },
 };
