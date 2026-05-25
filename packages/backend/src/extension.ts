@@ -25,6 +25,7 @@ import { ChaosEngine } from './chaos/chaos-engine';
 import { ChaosApiImpl } from './chaos/chaos-api-impl';
 
 let chaosEngine: ChaosEngine | undefined;
+let statusBarUpdateInterval: ReturnType<typeof setInterval> | undefined;
 
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   console.log('Starting Chaos Lab extension');
@@ -76,6 +77,29 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   const rpcExtension = new RpcExtension(panel.webview);
   rpcExtension.registerInstance<ChaosApiImpl>(ChaosApiImpl, chaosApiImpl);
 
+  const chaosStatusBar = extensionApi.window.createStatusBarItem();
+  chaosStatusBar.text = 'Chaos Lab';
+  chaosStatusBar.command = 'chaos-lab.openChaos';
+  chaosStatusBar.show();
+  extensionContext.subscriptions.push(chaosStatusBar);
+
+  statusBarUpdateInterval = setInterval(() => {
+    if (chaosEngine) {
+      const state = chaosEngine.getState();
+      chaosStatusBar.text = state.runningAttacks > 0
+        ? `Chaos Lab (${state.runningAttacks} active)`
+        : 'Chaos Lab';
+    }
+  }, 3000);
+
+  extensionContext.subscriptions.push({
+    dispose: () => {
+      if (statusBarUpdateInterval) {
+        clearInterval(statusBarUpdateInterval);
+      }
+    },
+  });
+
   const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
     await chaosApiImpl.stopAllChaos();
     await extensionApi.window.showInformationMessage('All chaos operations have been stopped and rolled back.');
@@ -106,5 +130,9 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
 export async function deactivate(): Promise<void> {
   console.log('Stopping Chaos Lab extension');
+  if (statusBarUpdateInterval) {
+    clearInterval(statusBarUpdateInterval);
+    statusBarUpdateInterval = undefined;
+  }
   await chaosEngine?.stopAll();
 }
