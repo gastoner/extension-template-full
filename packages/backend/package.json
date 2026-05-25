@@ -34,6 +34,16 @@
     "configuration": {
       "title": "Chaos Lab",
       "properties": {
+        "chaos-lab.chaosSafeContainers": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated container name patterns that should never be targeted by chaos or isolation (supports * wildcards). Example: 'postgres*,redis-prod'."
+        },
+        "chaos-lab.showStatusBarChaos": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Chaos mode indicator in the status bar."
+        },
         "chaos.machine.cpus": {
           "type": "number",
           "format": "cpu",

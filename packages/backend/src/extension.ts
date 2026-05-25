@@ -23,6 +23,7 @@ import { RpcExtension } from '/@shared/src/messages/MessageProxy';
 import { ContainerService } from './container-service';
 import { ChaosEngine } from './chaos/chaos-engine';
 import { ChaosApiImpl } from './chaos/chaos-api-impl';
+import { SettingsManager } from './settings-manager';
 import { registerChaosProvider, disposeChaosProvider } from './chaos-provider';
 
 let chaosEngine: ChaosEngine | undefined;
@@ -31,9 +32,16 @@ let statusBarUpdateInterval: ReturnType<typeof setInterval> | undefined;
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   console.log('Starting Chaos Lab extension');
 
+  const settingsManager = new SettingsManager();
+  settingsManager.load();
+  extensionContext.subscriptions.push({ dispose: () => settingsManager.dispose() });
+
+  const settings = settingsManager.getSettings();
+
   const containerService = new ContainerService();
 
   chaosEngine = new ChaosEngine(containerService);
+  chaosEngine.setSafePatterns(settings.chaosSafeContainers);
   extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
 
   const chaosApiImpl = new ChaosApiImpl(chaosEngine, containerService);
@@ -78,10 +86,24 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   const rpcExtension = new RpcExtension(panel.webview);
   rpcExtension.registerInstance<ChaosApiImpl>(ChaosApiImpl, chaosApiImpl);
 
+  settingsManager.onSettingsChanged(newSettings => {
+    chaosEngine?.setSafePatterns(newSettings.chaosSafeContainers);
+
+    if (chaosStatusBar) {
+      if (newSettings.showStatusBarChaos) {
+        chaosStatusBar.show();
+      } else {
+        chaosStatusBar.hide();
+      }
+    }
+  });
+
   const chaosStatusBar = extensionApi.window.createStatusBarItem();
   chaosStatusBar.text = 'Chaos Lab';
   chaosStatusBar.command = 'chaos-lab.openChaos';
-  chaosStatusBar.show();
+  if (settings.showStatusBarChaos) {
+    chaosStatusBar.show();
+  }
   extensionContext.subscriptions.push(chaosStatusBar);
 
   statusBarUpdateInterval = setInterval(() => {
