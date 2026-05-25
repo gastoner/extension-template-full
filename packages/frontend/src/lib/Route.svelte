@@ -3,18 +3,11 @@ import { createRouteObject } from 'tinro/dist/tinro_lib';
 import type { TinroRouteMeta } from 'tinro';
 import { saveRouterState } from '../api/client';
 
-/**
- * Route component.
- *
- * This component is used to define a route in the application, to where a component / page should be rendered.
- */
-
 export let path = '/*';
 export let fallback = false;
 export let redirect = false;
 export let firstmatch = false;
 export let breadcrumb: string | undefined = undefined;
-
 export let isAppMounted: boolean = false;
 
 let showContent = false;
@@ -39,14 +32,9 @@ const route = createRouteObject({
   },
 });
 
-$: route.update({
-  path,
-  redirect,
-  firstmatch,
-  breadcrumb,
-});
+$: route.update({ path, redirect, firstmatch, breadcrumb });
 </script>
 
 {#if showContent}
-  <slot params={params} meta={meta} />
+  <slot {params} {meta} />
 {/if}

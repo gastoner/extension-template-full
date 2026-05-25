@@ -2,7 +2,7 @@
   "name": "chaos-lab",
   "displayName": "Chaos Lab",
   "description": "Chaos engineering toolkit for Podman Desktop",
-  "version": "1.4.0-next",
+  "version": "0.1.0",
   "icon": "icon.png",
   "publisher": "yourusername",
   "private": true,

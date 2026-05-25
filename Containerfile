@@ -9,12 +9,10 @@ RUN npm run build
 
 FROM scratch
 
-COPY --from=builder /app/packages/backend/dist/ /extension/dist
-COPY --from=builder /app/packages/backend/package.json /extension/
-COPY --from=builder /app/packages/backend/media/ /extension/media
-COPY --from=builder /app/LICENSE /extension/
-COPY --from=builder /app/packages/backend/icon.png /extension/
-COPY --from=builder /app/README.md /extension/
+LABEL org.opencontainers.image.title="Chaos Lab" \
+        org.opencontainers.image.description="Chaos engineering toolkit for Podman Desktop" \
+        org.opencontainers.image.vendor="Your Org / Username" \
+        io.podman-desktop.api.version=">= 1.12.0"
 
 LABEL org.opencontainers.image.title="Podman Desktop Chaos Lab Extension" \
         org.opencontainers.image.description="Containers durability harness tool" \
