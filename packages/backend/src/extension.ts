@@ -125,6 +125,17 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   );
   extensionContext.subscriptions.push(viewUsageCommand);
 
+  const trayMenu = extensionApi.tray.registerMenuItem({
+    id: 'chaos-lab.tray',
+    type: 'submenu',
+    label: 'Chaos Lab',
+    submenu: [
+      { id: 'chaos-lab.openChaos', label: 'Open Dashboard' },
+      { id: 'chaos-lab.stopAll', label: 'Stop All Chaos' },
+    ],
+  });
+  extensionContext.subscriptions.push(trayMenu);
+
   console.log('Chaos Lab extension activated');
 }
 
