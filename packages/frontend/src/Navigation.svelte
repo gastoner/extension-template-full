@@ -30,8 +30,7 @@ let { meta }: Props = $props();
 
   <div class="h-full overflow-hidden hover:overflow-y-auto" style="margin-bottom:auto">
     <div class="pl-3 mt-1 ml-[4px]">
-      <span class="text-xs uppercase tracking-wider text-[color:var(--pd-secondary-nav-header-text)] opacity-60"
-        >Chaos Lab</span>
+      <span class="text-xs uppercase tracking-wider text-[color:var(--pd-secondary-nav-header-text)] opacity-60">Chaos Lab</span>
     </div>
     <SettingsNavItem
       icon={faBolt}

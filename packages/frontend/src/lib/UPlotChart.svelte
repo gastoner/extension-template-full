@@ -35,11 +35,10 @@ function buildOpts(): uPlot.Options {
         stroke: textColor,
         grid: { stroke: gridColor, width: 1 },
         ticks: { stroke: gridColor, width: 1 },
-        values: (_u: uPlot, vals: number[]) =>
-          vals.map(v => {
-            const d = new Date(v * 1000);
-            return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-          }),
+        values: (_u: uPlot, vals: number[]) => vals.map(v => {
+          const d = new Date(v * 1000);
+          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+        }),
       },
       {
         stroke: textColor,
@@ -49,7 +48,7 @@ function buildOpts(): uPlot.Options {
         ...(yFormatter ? { values: (_u: uPlot, vals: number[]) => vals.map(yFormatter) } : {}),
       },
     ],
-    series: [{}, ...series],
+    series: [{ }, ...series],
   };
 }
 

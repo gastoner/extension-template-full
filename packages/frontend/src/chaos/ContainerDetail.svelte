@@ -64,7 +64,11 @@ let memData: uPlot.AlignedData = $derived.by(() => {
 
 let netData: uPlot.AlignedData = $derived.by(() => {
   if (!dataPoints.length) return [[], [], []];
-  return [dataPoints.map(p => p.timestamp / 1000), dataPoints.map(p => p.netRxMb), dataPoints.map(p => p.netTxMb)];
+  return [
+    dataPoints.map(p => p.timestamp / 1000),
+    dataPoints.map(p => p.netRxMb),
+    dataPoints.map(p => p.netTxMb),
+  ];
 });
 
 let blockData: uPlot.AlignedData = $derived.by(() => {
@@ -77,7 +81,9 @@ let blockData: uPlot.AlignedData = $derived.by(() => {
 });
 
 let cpuSeries: uPlot.Series[] = $derived.by(() => {
-  const base: uPlot.Series[] = [{ label: 'CPU %', stroke: getComputedColor('--pd-status-running'), width: 2 }];
+  const base: uPlot.Series[] = [
+    { label: 'CPU %', stroke: getComputedColor('--pd-status-running'), width: 2 },
+  ];
   if (hasCpuLimit) {
     base.push({ label: 'Limit', stroke: getComputedColor('--pd-status-degraded'), width: 1, dash: [5, 5] });
   }
@@ -85,12 +91,7 @@ let cpuSeries: uPlot.Series[] = $derived.by(() => {
 });
 
 let memSeries: uPlot.Series[] = $derived([
-  {
-    label: 'Usage',
-    stroke: getComputedColor('--pd-button-primary-bg'),
-    width: 2,
-    fill: getComputedColor('--pd-button-primary-bg') + '30',
-  },
+  { label: 'Usage', stroke: getComputedColor('--pd-button-primary-bg'), width: 2, fill: getComputedColor('--pd-button-primary-bg') + '30' },
   { label: 'Limit', stroke: getComputedColor('--pd-status-degraded'), width: 1, dash: [5, 5] },
 ]);
 
@@ -129,10 +130,9 @@ async function pollLatest(): Promise<void> {
     if (newStats && newStats.timestamp > lastTimestamp) {
       lastTimestamp = newStats.timestamp;
       latestStats = newStats;
-      const updated =
-        dataPoints.length >= MAX_POINTS
-          ? [...dataPoints.slice(dataPoints.length - MAX_POINTS + 1), newStats]
-          : [...dataPoints, newStats];
+      const updated = dataPoints.length >= MAX_POINTS
+        ? [...dataPoints.slice(dataPoints.length - MAX_POINTS + 1), newStats]
+        : [...dataPoints, newStats];
       dataPoints = updated;
     }
   } catch (err) {
@@ -158,6 +158,7 @@ onMount(() => {
   breadcrumbRightPart={container?.name}
   onclose={goBack}
   onbreadcrumbClick={goBack}>
+
   {#snippet iconSnippet()}
     {#if container}
       <StatusIcon status={containerStatus(container)} size={24} />
@@ -168,15 +169,13 @@ onMount(() => {
     {#if container}
       <div class="flex items-center gap-2">
         {#if container.isolated}
-          <span
-            class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
+          <span class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
             {container.isolationMode}
           </span>
         {/if}
         {#each container.activeAttacks as attack}
           <Tooltip tip="{attack.type} attack active" bottom>
-            <span
-              class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+            <span class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
               {attack.type}
             </span>
           </Tooltip>
@@ -205,27 +204,20 @@ onMount(() => {
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
               <div class="text-[10px] text-[var(--pd-content-text)] uppercase">CPU</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
-                {latestStats.cpuPercent.toFixed(1)}%{#if latestStats.cpuLimitPercent > 0}
-                  / {latestStats.cpuLimitPercent.toFixed(0)}%{/if}
+                {latestStats.cpuPercent.toFixed(1)}%{#if latestStats.cpuLimitPercent > 0} / {latestStats.cpuLimitPercent.toFixed(0)}%{/if}
               </div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
               <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Memory</div>
-              <div class="text-sm font-bold text-[var(--pd-content-header)]">
-                {formatMb(latestStats.memoryUsageMb)} / {formatMb(latestStats.memoryLimitMb)}
-              </div>
+              <div class="text-sm font-bold text-[var(--pd-content-header)]">{formatMb(latestStats.memoryUsageMb)} / {formatMb(latestStats.memoryLimitMb)}</div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
               <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Net I/O</div>
-              <div class="text-sm font-bold text-[var(--pd-content-header)]">
-                {formatMb(latestStats.netRxMb)} / {formatMb(latestStats.netTxMb)}
-              </div>
+              <div class="text-sm font-bold text-[var(--pd-content-header)]">{formatMb(latestStats.netRxMb)} / {formatMb(latestStats.netTxMb)}</div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
               <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Block I/O</div>
-              <div class="text-sm font-bold text-[var(--pd-content-header)]">
-                {formatMb(latestStats.blockReadMb)} / {formatMb(latestStats.blockWriteMb)}
-              </div>
+              <div class="text-sm font-bold text-[var(--pd-content-header)]">{formatMb(latestStats.blockReadMb)} / {formatMb(latestStats.blockWriteMb)}</div>
             </div>
           {/if}
         </div>
