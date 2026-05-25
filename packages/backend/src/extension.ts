@@ -23,6 +23,7 @@ import { RpcExtension } from '/@shared/src/messages/MessageProxy';
 import { ContainerService } from './container-service';
 import { ChaosEngine } from './chaos/chaos-engine';
 import { ChaosApiImpl } from './chaos/chaos-api-impl';
+import { registerChaosProvider, disposeChaosProvider } from './chaos-provider';
 
 let chaosEngine: ChaosEngine | undefined;
 let statusBarUpdateInterval: ReturnType<typeof setInterval> | undefined;
@@ -136,6 +137,8 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   });
   extensionContext.subscriptions.push(trayMenu);
 
+  registerChaosProvider(extensionContext);
+
   console.log('Chaos Lab extension activated');
 }
 
@@ -146,4 +149,5 @@ export async function deactivate(): Promise<void> {
     statusBarUpdateInterval = undefined;
   }
   await chaosEngine?.stopAll();
+  disposeChaosProvider();
 }
