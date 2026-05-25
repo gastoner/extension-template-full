@@ -79,12 +79,7 @@ export class ContainerService {
 
     try {
       const result = await extensionApi.process.exec('podman', [
-        'stats',
-        '--no-stream',
-        '--no-reset',
-        '--format',
-        'json',
-        containerId,
+        'stats', '--no-stream', '--no-reset', '--format', 'json', containerId,
       ]);
       const entries: PodmanStatsEntry[] = JSON.parse(result.stdout);
       if (!entries.length) return undefined;
@@ -92,10 +87,9 @@ export class ContainerService {
 
       const memParts = this.splitCombinedValue(String(s.mem_usage ?? s.MemUsage ?? '0'));
       const memUsageBytes = this.parseHumanBytes(memParts[0]);
-      const memLimitBytes =
-        memParts.length > 1
-          ? this.parseHumanBytes(memParts[1])
-          : this.parseHumanBytes(s.mem_limit ?? s.MemLimit ?? '0');
+      const memLimitBytes = memParts.length > 1
+        ? this.parseHumanBytes(memParts[1])
+        : this.parseHumanBytes(s.mem_limit ?? s.MemLimit ?? '0');
 
       const netCombined = s.net_io ?? s.NetIO;
       let netRxBytes: number;
@@ -104,8 +98,8 @@ export class ContainerService {
         netRxBytes = this.splitAndParse(netCombined, 0);
         netTxBytes = this.splitAndParse(netCombined, 1);
       } else {
-        netRxBytes = s.net_input !== undefined ? this.parseHumanBytes(s.net_input) : 0;
-        netTxBytes = s.net_output !== undefined ? this.parseHumanBytes(s.net_output) : 0;
+        netRxBytes = s.net_input != null ? this.parseHumanBytes(s.net_input) : 0;
+        netTxBytes = s.net_output != null ? this.parseHumanBytes(s.net_output) : 0;
       }
 
       const blockCombined = s.block_io ?? s.BlockIO;
@@ -115,8 +109,8 @@ export class ContainerService {
         blockReadBytes = this.splitAndParse(blockCombined, 0);
         blockWriteBytes = this.splitAndParse(blockCombined, 1);
       } else {
-        blockReadBytes = s.block_input !== undefined ? this.parseHumanBytes(s.block_input) : 0;
-        blockWriteBytes = s.block_output !== undefined ? this.parseHumanBytes(s.block_output) : 0;
+        blockReadBytes = s.block_input != null ? this.parseHumanBytes(s.block_input) : 0;
+        blockWriteBytes = s.block_output != null ? this.parseHumanBytes(s.block_output) : 0;
       }
 
       const cpuLimitPercent = await this.getCpuLimitPercent(containerId);
@@ -155,9 +149,7 @@ export class ContainerService {
   }
 
   private splitCombinedValue(value: string): string[] {
-    return String(value)
-      .split('/')
-      .map(p => p.trim());
+    return String(value).split('/').map(p => p.trim());
   }
 
   private splitAndParse(value: string, index: number): number {
@@ -171,9 +163,7 @@ export class ContainerService {
 
     try {
       const result = await extensionApi.process.exec('podman', [
-        'inspect',
-        containerId,
-        '--format',
+        'inspect', containerId, '--format',
         '{{.HostConfig.NanoCpus}} {{.HostConfig.CpuQuota}} {{.HostConfig.CpuPeriod}}',
       ]);
       const parts = result.stdout.trim().split(/\s+/);
@@ -255,10 +245,7 @@ export class ContainerService {
   async getContainerNetworks(containerId: string): Promise<string[]> {
     try {
       const result = await extensionApi.process.exec('podman', [
-        'inspect',
-        containerId,
-        '--format',
-        '{{range $key, $val := .NetworkSettings.Networks}}{{$key}} {{end}}',
+        'inspect', containerId, '--format', '{{range $key, $val := .NetworkSettings.Networks}}{{$key}} {{end}}',
       ]);
       return result.stdout.trim().split(/\s+/).filter(Boolean);
     } catch {
@@ -283,10 +270,7 @@ export class ContainerService {
   async checkToolAvailability(containerId: string, tool: string): Promise<boolean> {
     try {
       await extensionApi.process.exec('podman', [
-        'exec',
-        containerId,
-        'sh',
-        '-c',
+        'exec', containerId, 'sh', '-c',
         `PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin" command -v ${tool}`,
       ]);
       return true;
