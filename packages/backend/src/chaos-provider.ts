@@ -40,68 +40,43 @@ const DEFAULT_CONFIG: MachineConfig = {
 };
 
 export function registerChaosProvider(extensionContext: extensionApi.ExtensionContext): void {
-  providerInstance = extensionApi.provider.createProvider({
-    id: 'chaos',
-    name: 'Chaos',
-    status: 'unknown',
-    version: '1.0.0',
-    images: {
-      icon: './icon.png',
-      logo: { dark: './icon.png', light: './icon.png' },
-    },
-    emptyConnectionMarkdownDescription:
-      'No Chaos machines running. Click **Create** to spin up a new Chaos machine.',
-  });
+  // ---------------------------------------------------------------------------
+  // #11: Create a container provider
+  // Use extensionApi.provider.createProvider() to register a new provider with:
+  //   - id: 'chaos'
+  //   - name: 'Chaos'
+  //   - status: 'unknown'
+  //   - version: '1.0.0'
+  //   - images: { icon: './icon.png', logo: { dark: './icon.png', light: './icon.png' } }
+  //   - emptyConnectionMarkdownDescription: a message shown when no machines exist
+  // Store the result in providerInstance.
+  // Push providerInstance to extensionContext.subscriptions for cleanup.
+  // Hint: extensionApi.provider.createProvider({ id, name, status, ... })
+  // ---------------------------------------------------------------------------
 
-  providerInstance.setContainerProviderConnectionFactory({
-    creationDisplayName: 'Chaos Machine',
-    creationButtonTitle: 'Create Chaos Machine',
+  // ---------------------------------------------------------------------------
+  // #12: Set up a connection factory for creating Chaos machines
+  // Call providerInstance.setContainerProviderConnectionFactory() with:
+  //   - creationDisplayName: 'Chaos Machine'
+  //   - creationButtonTitle: 'Create Chaos Machine'
+  //   - create: async (params, logger, token) => { ... }
+  // In the create callback:
+  //   1. Read machine name from params['chaos.factory.machine.name']
+  //   2. Read cpus, memory, disk from params (convert bytes → MB/GB)
+  //   3. Call registerMachineConnection(machineName, config)
+  //   4. Update provider status to 'ready'
+  // Hint: providerInstance.setContainerProviderConnectionFactory({ ... })
+  // ---------------------------------------------------------------------------
 
-    create: async (params, logger, token) => {
-      const machineName = (params['chaos.factory.machine.name'] as string) || `chaos-${Date.now()}`;
-      const cpus = Number(params['chaos.factory.machine.cpus']) || DEFAULT_CONFIG.cpus;
-      const memoryBytes = Number(params['chaos.factory.machine.memory']) || DEFAULT_CONFIG.memoryMb * 1024 * 1024;
-      const diskBytes = Number(params['chaos.factory.machine.diskSize']) || DEFAULT_CONFIG.diskGb * 1024 * 1024 * 1024;
-
-      const memoryMb = Math.round(memoryBytes / (1024 * 1024));
-      const diskGb = Math.round(diskBytes / (1024 * 1024 * 1024));
-      const config: MachineConfig = { cpus, memoryMb, diskGb };
-
-      logger?.log(`Creating Chaos machine '${machineName}' (${cpus} CPUs, ${memoryMb} MB RAM, ${diskGb} GB disk)...`);
-
-      await extensionApi.window.withProgress(
-        { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Creating Chaos Machine: ${machineName}` },
-        async progress => {
-          progress.report({ message: 'Allocating resources...' });
-          await delay(1200);
-
-          if (token?.isCancellationRequested) {
-            logger?.log('Creation cancelled');
-            return;
-          }
-
-          progress.report({ increment: 33, message: `Provisioning ${cpus} CPUs, ${memoryMb} MB RAM...` });
-          await delay(1200);
-
-          if (token?.isCancellationRequested) {
-            logger?.log('Creation cancelled');
-            return;
-          }
-
-          progress.report({ increment: 33, message: `Allocating ${diskGb} GB disk...` });
-          await delay(1000);
-
-          registerMachineConnection(machineName, config);
-          providerInstance?.updateStatus('ready');
-
-          progress.report({ increment: 34, message: `Machine '${machineName}' ready` });
-          logger?.log(`Chaos machine '${machineName}' created and running`);
-        },
-      );
-    },
-  });
-
-  extensionContext.subscriptions.push(providerInstance);
+  // ---------------------------------------------------------------------------
+  // #13: Show progress during machine creation
+  // Wrap the create callback body in extensionApi.window.withProgress():
+  //   - location: extensionApi.ProgressLocation.TASK_WIDGET
+  //   - title: `Creating Chaos Machine: ${machineName}`
+  // Use progress.report({ message, increment }) to show status steps.
+  // Check token?.isCancellationRequested between steps to allow cancellation.
+  // Hint: extensionApi.window.withProgress({ location, title }, async (progress) => { ... })
+  // ---------------------------------------------------------------------------
 }
 
 function registerMachineConnection(machineName: string, config: MachineConfig): void {
@@ -174,33 +149,22 @@ function registerMachineConnection(machineName: string, config: MachineConfig): 
 
         log?.log(`Updating machine '${machineName}': ${changes.join(', ')}`);
 
-        await extensionApi.window.withProgress(
-          { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Updating Chaos Machine: ${machineName}` },
-          async progress => {
-            progress.report({ message: 'Applying configuration changes...' });
+        const wasRunning = entry.status === 'started';
+        if (wasRunning) {
+          entry.status = 'stopping';
+          await delay(800);
+          entry.status = 'stopped';
+        }
 
-            const wasRunning = entry.status === 'started';
-            if (wasRunning) {
-              progress.report({ message: 'Stopping machine for reconfiguration...' });
-              entry.status = 'stopping';
-              await delay(800);
-              entry.status = 'stopped';
-            }
+        await delay(1200);
 
-            progress.report({ increment: 50, message: changes.join(', ') });
-            await delay(1200);
+        if (wasRunning) {
+          entry.status = 'starting';
+          await delay(800);
+          entry.status = 'started';
+        }
 
-            if (wasRunning) {
-              progress.report({ message: 'Restarting machine...' });
-              entry.status = 'starting';
-              await delay(800);
-              entry.status = 'started';
-            }
-
-            progress.report({ increment: 50, message: 'Configuration updated' });
-            log?.log(`Machine '${machineName}' updated: ${entry.config.cpus} CPUs, ${entry.config.memoryMb} MB RAM, ${entry.config.diskGb} GB disk`);
-          },
-        );
+        log?.log(`Machine '${machineName}' updated: ${entry.config.cpus} CPUs, ${entry.config.memoryMb} MB RAM, ${entry.config.diskGb} GB disk`);
       },
     },
   });

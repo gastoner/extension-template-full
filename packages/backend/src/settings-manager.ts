@@ -30,14 +30,16 @@ export class SettingsManager {
   load(): void {
     this.readConfig();
 
-    this.disposable = extensionApi.configuration.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration(CONFIG_SECTION)) {
-        this.readConfig();
-        for (const listener of this.changeListeners) {
-          listener(this.current);
-        }
-      }
-    });
+    // -------------------------------------------------------------------------
+    // #9: Listen for configuration changes
+    // Subscribe to extensionApi.configuration.onDidChangeConfiguration().
+    // When the event affects CONFIG_SECTION ('chaos-lab'):
+    //   1. Call this.readConfig() to refresh cached values
+    //   2. Notify all registered change listeners with the new settings
+    // Store the returned disposable in this.disposable for cleanup.
+    // Hint: extensionApi.configuration.onDidChangeConfiguration(e => { ... })
+    // Hint: e.affectsConfiguration(CONFIG_SECTION) to filter relevant changes
+    // -------------------------------------------------------------------------
   }
 
   onSettingsChanged(listener: (settings: ExtensionSettings) => void): void {
@@ -54,15 +56,17 @@ export class SettingsManager {
   }
 
   private readConfig(): void {
-    const config = extensionApi.configuration.getConfiguration(CONFIG_SECTION);
-
-    this.current = {
-      chaosSafeContainers: this.parseSafeContainers(
-        config.get<string>('chaosSafeContainers') ?? '',
-      ),
-      showStatusBarChaos:
-        config.get<boolean>('showStatusBarChaos') ?? DEFAULT_SETTINGS.showStatusBarChaos,
-    };
+    // -------------------------------------------------------------------------
+    // #10: Read extension configuration values
+    // Use extensionApi.configuration.getConfiguration(CONFIG_SECTION) to get
+    // the configuration object, then read individual properties with config.get<T>():
+    //   - 'chaosSafeContainers' (string) → parse with this.parseSafeContainers()
+    //   - 'showStatusBarChaos' (boolean) → fall back to DEFAULT_SETTINGS value
+    // Assign the result to this.current.
+    // Hint: extensionApi.configuration.getConfiguration(section)
+    // Hint: config.get<string>('key') ?? defaultValue
+    // -------------------------------------------------------------------------
+    this.current = { ...DEFAULT_SETTINGS };
   }
 
   private parseSafeContainers(value: string): string[] {
