@@ -123,15 +123,13 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     },
   });
 
-  // ---------------------------------------------------------------------------
-  // #4: Register the "Stop All Chaos" command
-  // Register a command 'chaos-lab.stopAll' that:
-  //   1. Calls chaosApiImpl.stopAllChaos()
-  //   2. Shows a toast: 'All chaos operations have been stopped and rolled back.'
-  // Push the returned disposable to extensionContext.subscriptions.
-  // Hint: extensionApi.commands.registerCommand(id, callback)
-  // Hint: extensionApi.window.showInformationMessage(text)
-  // ---------------------------------------------------------------------------
+  const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
+    await chaosApiImpl.stopAllChaos();
+    extensionApi.window.showInformationMessage(
+      'All chaos operations have been stopped and rolled back.',
+    );
+  });
+  extensionContext.subscriptions.push(stopAllCommand);
 
   // ---------------------------------------------------------------------------
   // #5: Register the "Open Dashboard" command
