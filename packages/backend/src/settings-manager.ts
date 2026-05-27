@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type * as extensionApi from '@podman-desktop/api';
+import * as extensionApi from '@podman-desktop/api';
 import type { ExtensionSettings } from '/@shared/src/SettingsApi';
 import { DEFAULT_SETTINGS } from '/@shared/src/SettingsApi';
 
@@ -31,16 +31,14 @@ export class SettingsManager {
   load(): void {
     this.readConfig();
 
-    // -------------------------------------------------------------------------
-    // #8: Listen for configuration changes
-    // Subscribe to extensionApi.configuration.onDidChangeConfiguration().
-    // When the event affects CONFIG_SECTION ('chaos-lab'):
-    //   1. Call this.readConfig() to refresh cached values
-    //   2. Notify all registered change listeners with the new settings
-    // Store the returned disposable in this.disposable for cleanup.
-    // Hint: extensionApi.configuration.onDidChangeConfiguration(e => { ... })
-    // Hint: e.affectsConfiguration(CONFIG_SECTION) to filter relevant changes
-    // -------------------------------------------------------------------------
+    this.disposable = extensionApi.configuration.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration(CONFIG_SECTION)) {
+        this.readConfig();
+        for (const listener of this.changeListeners) {
+          listener(this.current);
+        }
+      }
+    });
   }
 
   onSettingsChanged(listener: (settings: ExtensionSettings) => void): void {
