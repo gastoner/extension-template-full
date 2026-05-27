@@ -59,7 +59,7 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
     creationDisplayName: 'Chaos Machine',
     creationButtonTitle: 'Create Chaos Machine',
 
-    create: async (params, logger, _token) => {
+    create: async (params, logger, token) => {
       const machineName = (params['chaos.factory.machine.name'] as string) || `chaos-${Date.now()}`;
       const cpus = Number(params['chaos.factory.machine.cpus']) || DEFAULT_CONFIG.cpus;
       const memoryBytes = Number(params['chaos.factory.machine.memory']) || DEFAULT_CONFIG.memoryMb * 1024 * 1024;
@@ -71,21 +71,35 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
 
       logger?.log(`Creating Chaos machine '${machineName}' (${cpus} CPUs, ${memoryMb} MB RAM, ${diskGb} GB disk)...`);
 
-      // -----------------------------------------------------------------------
-      // #13: Show progress during machine creation
-      // Wrap the remaining creation logic in extensionApi.window.withProgress():
-      //   - location: extensionApi.ProgressLocation.TASK_WIDGET
-      //   - title: `Creating Chaos Machine: ${machineName}`
-      // Use progress.report({ message, increment }) to show status steps.
-      // Check token?.isCancellationRequested between steps to allow cancellation.
-      // At the end, call registerMachineConnection(machineName, config) and
-      // update providerInstance status to 'ready'.
-      // Hint: extensionApi.window.withProgress({ location, title }, async (progress) => { ... })
-      // -----------------------------------------------------------------------
+      await extensionApi.window.withProgress(
+        { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Creating Chaos Machine: ${machineName}` },
+        async progress => {
+          progress.report({ message: 'Allocating resources...' });
+          await delay(1200);
 
-      registerMachineConnection(machineName, config);
-      providerInstance?.updateStatus('ready');
-      logger?.log(`Chaos machine '${machineName}' created and running`);
+          if (token?.isCancellationRequested) {
+            logger?.log('Creation cancelled');
+            return;
+          }
+
+          progress.report({ increment: 33, message: `Provisioning ${cpus} CPUs, ${memoryMb} MB RAM...` });
+          await delay(1200);
+
+          if (token?.isCancellationRequested) {
+            logger?.log('Creation cancelled');
+            return;
+          }
+
+          progress.report({ increment: 33, message: `Allocating ${diskGb} GB disk...` });
+          await delay(1000);
+
+          registerMachineConnection(machineName, config);
+          providerInstance?.updateStatus('ready');
+
+          progress.report({ increment: 34, message: `Machine '${machineName}' ready` });
+          logger?.log(`Chaos machine '${machineName}' created and running`);
+        },
+      );
     },
   });
 }
