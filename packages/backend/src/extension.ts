@@ -98,18 +98,13 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     }
   });
 
-  // ---------------------------------------------------------------------------
-  // #2: Create a status bar item
-  // Create a status bar item that displays "Chaos Lab" as its text.
-  // Set its .command to 'chaos-lab.openChaos' so clicking it opens the dashboard.
-  // Call .show() to make it visible (respecting settings.showStatusBarChaos).
-  // The 'chaos-lab.showStatusBarChaos' boolean is declared in package.json under
-  // contributes.configuration and is already available via settings.showStatusBarChaos.
-  // Push it to extensionContext.subscriptions for proper disposal.
-  // Hint: extensionApi.window.createStatusBarItem()
-  // ---------------------------------------------------------------------------
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chaosStatusBar = undefined as any; // replace with real implementation
+  const chaosStatusBar = extensionApi.window.createStatusBarItem();
+  chaosStatusBar.text = 'Chaos Lab';
+  chaosStatusBar.command = 'chaos-lab.openChaos';
+  if (settings.showStatusBarChaos) {
+    chaosStatusBar.show();
+  }
+  extensionContext.subscriptions.push(chaosStatusBar);
 
   // ---------------------------------------------------------------------------
   // #3: Dynamically update the status bar text
