@@ -19,6 +19,10 @@
         "title": "Chaos Lab: Stop All Chaos"
       },
       {
+        "command": "chaos-lab.openChaos",
+        "title": "Chaos Lab: Open Dashboard"
+      },
+      {
         "command": "chaos-lab.onboarding.checkProvider",
         "title": "Chaos Lab: Check Provider Status"
       }
