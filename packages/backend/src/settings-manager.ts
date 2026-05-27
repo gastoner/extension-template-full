@@ -54,17 +54,15 @@ export class SettingsManager {
   }
 
   private readConfig(): void {
-    // -------------------------------------------------------------------------
-    // #10: Read extension configuration values
-    // Use extensionApi.configuration.getConfiguration(CONFIG_SECTION) to get
-    // the configuration object, then read individual properties with config.get<T>():
-    //   - 'chaosSafeContainers' (string) → parse with this.parseSafeContainers()
-    //   - 'showStatusBarChaos' (boolean) → fall back to DEFAULT_SETTINGS value
-    // Assign the result to this.current.
-    // Hint: extensionApi.configuration.getConfiguration(section)
-    // Hint: config.get<string>('key') ?? defaultValue
-    // -------------------------------------------------------------------------
-    this.current = { ...DEFAULT_SETTINGS };
+    const config = extensionApi.configuration.getConfiguration(CONFIG_SECTION);
+
+    this.current = {
+      chaosSafeContainers: this.parseSafeContainers(
+        config.get<string>('chaosSafeContainers') ?? '',
+      ),
+      showStatusBarChaos:
+        config.get<boolean>('showStatusBarChaos') ?? DEFAULT_SETTINGS.showStatusBarChaos,
+    };
   }
 
   private parseSafeContainers(value: string): string[] {
