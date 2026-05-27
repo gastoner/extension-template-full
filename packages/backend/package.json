@@ -15,10 +15,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "chaos-lab.viewContainerUsage",
-        "title": "Chaos Lab: View Container"
-      },
-      {
         "command": "chaos-lab.stopAll",
         "title": "Chaos Lab: Stop All Chaos"
       }

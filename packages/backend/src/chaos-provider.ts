@@ -41,7 +41,7 @@ const DEFAULT_CONFIG: MachineConfig = {
 
 export function registerChaosProvider(extensionContext: extensionApi.ExtensionContext): void {
   // ---------------------------------------------------------------------------
-  // #11: Create a container provider
+  // #10: Create a container provider
   // Use extensionApi.provider.createProvider() to register a new provider with:
   //   - id: 'chaos'
   //   - name: 'Chaos'
@@ -55,7 +55,7 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // #12: Set up a connection factory for creating Chaos machines
+  // #11: Set up a connection factory for creating Chaos machines
   // Call providerInstance.setContainerProviderConnectionFactory() with:
   //   - creationDisplayName: 'Chaos Machine'
   //   - creationButtonTitle: 'Create Chaos Machine'
@@ -69,7 +69,7 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // #13: Show progress during machine creation
+  // #12: Show progress during machine creation
   // Wrap the create callback body in extensionApi.window.withProgress():
   //   - location: extensionApi.ProgressLocation.TASK_WIDGET
   //   - title: `Creating Chaos Machine: ${machineName}`

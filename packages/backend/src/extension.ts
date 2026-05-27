@@ -99,21 +99,12 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   });
 
   // ---------------------------------------------------------------------------
-  // #1: Show a toast notification and a progress task
-  // A) Show an information message to the user:
-  //      'Chaos Lab extension has been activated. Open the dashboard to get started.'
-  //    Hint: extensionApi.window.showInformationMessage(text)
-  //
-  // B) Open chaos-api-impl.ts and wrap stopAllChaos() in a progress task:
-  //      extensionApi.window.withProgress({ location, title }, async (progress) => { ... })
-  //    See the #1 TODO there for details.
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
   // #2: Create a status bar item
   // Create a status bar item that displays "Chaos Lab" as its text.
   // Set its .command to 'chaos-lab.openChaos' so clicking it opens the dashboard.
   // Call .show() to make it visible (respecting settings.showStatusBarChaos).
+  // The 'chaos-lab.showStatusBarChaos' boolean is declared in package.json under
+  // contributes.configuration and is already available via settings.showStatusBarChaos.
   // Push it to extensionContext.subscriptions for proper disposal.
   // Hint: extensionApi.window.createStatusBarItem()
   // ---------------------------------------------------------------------------
@@ -133,7 +124,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   // #4: Register the "Stop All Chaos" command
   // Register a command 'chaos-lab.stopAll' that:
   //   1. Calls chaosApiImpl.stopAllChaos()
-  //   2. Shows a toast notification: 'All chaos operations have been stopped and rolled back.'
+  //   2. Shows a toast: 'All chaos operations have been stopped and rolled back.'
   // Push the returned disposable to extensionContext.subscriptions.
   // Hint: extensionApi.commands.registerCommand(id, callback)
   // Hint: extensionApi.window.showInformationMessage(text)
@@ -154,9 +145,11 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   // The command should:
   //   1. Extract the container ID (container?.id ?? container?.Id)
   //   2. Call panel.reveal() to show the webview
-  //   3. Post a message to the webview: { type: 'navigate', url: `/chaos/container/${containerId}` }
+  //   3. Wait for the webview to become visible (e.g. setTimeout ~200ms)
+  //   4. Post a message to the webview: { type: 'navigate', url: `/chaos/container/${containerId}` }
   // Push the returned disposable to extensionContext.subscriptions.
   // Hint: panel.webview.postMessage(message)
+  // Hint: await new Promise(resolve => setTimeout(resolve, 200))
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
@@ -170,13 +163,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   // Hint: extensionApi.tray.registerMenuItem({ id, type: 'submenu', label, submenu: [...] })
   // ---------------------------------------------------------------------------
 
-  // ---------------------------------------------------------------------------
-  // #8: Register the Chaos provider (connection creation)
-  // Call registerChaosProvider(extensionContext) to register a container provider
-  // that allows users to create, start, stop, and edit "Chaos machines"
-  // from the Podman Desktop Resources page.
-  // (The implementation lives in ./chaos-provider.ts — see TODOs #11–#13 there)
-  // ---------------------------------------------------------------------------
+  registerChaosProvider(extensionContext);
 
   console.log('Chaos Lab extension activated');
 }
