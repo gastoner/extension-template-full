@@ -40,22 +40,23 @@ const DEFAULT_CONFIG: MachineConfig = {
 };
 
 export function registerChaosProvider(extensionContext: extensionApi.ExtensionContext): void {
-  // ---------------------------------------------------------------------------
-  // #10: Create a container provider
-  // Use extensionApi.provider.createProvider() to register a new provider with:
-  //   - id: 'chaos'
-  //   - name: 'Chaos'
-  //   - status: 'unknown'
-  //   - version: '1.0.0'
-  //   - images: { icon: './icon.png', logo: { dark: './icon.png', light: './icon.png' } }
-  //   - emptyConnectionMarkdownDescription: a message shown when no machines exist
-  // Store the result in providerInstance.
-  // Push providerInstance to extensionContext.subscriptions for cleanup.
-  // Hint: extensionApi.provider.createProvider({ id, name, status, ... })
-  // ---------------------------------------------------------------------------
+  providerInstance = extensionApi.provider.createProvider({
+    id: 'chaos',
+    name: 'Chaos',
+    status: 'unknown',
+    version: '1.0.0',
+    images: {
+      icon: './icon.png',
+      logo: { dark: './icon.png', light: './icon.png' },
+    },
+    emptyConnectionMarkdownDescription:
+      'No Chaos machines running. Click **Create** to spin up a new Chaos machine.',
+  });
+
+  extensionContext.subscriptions.push(providerInstance);
 
   // ---------------------------------------------------------------------------
-  // #11: Set up a connection factory for creating Chaos machines
+  // #12: Set up a connection factory for creating Chaos machines
   // Call providerInstance.setContainerProviderConnectionFactory() with:
   //   - creationDisplayName: 'Chaos Machine'
   //   - creationButtonTitle: 'Create Chaos Machine'
@@ -69,7 +70,7 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // #12: Show progress during machine creation
+  // #13: Show progress during machine creation
   // Wrap the create callback body in extensionApi.window.withProgress():
   //   - location: extensionApi.ProgressLocation.TASK_WIDGET
   //   - title: `Creating Chaos Machine: ${machineName}`
