@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type * as extensionApi from '@podman-desktop/api';
+import * as extensionApi from '@podman-desktop/api';
 import type { ExtensionSettings } from '/@shared/src/SettingsApi';
 import { DEFAULT_SETTINGS } from '/@shared/src/SettingsApi';
 

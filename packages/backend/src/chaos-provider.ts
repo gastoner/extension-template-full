@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  **********************************************************************/
 
-import type * as extensionApi from '@podman-desktop/api';
+import * as extensionApi from '@podman-desktop/api';
 
 interface MachineConfig {
   cpus: number;
@@ -33,14 +33,12 @@ interface MachineEntry {
 let providerInstance: extensionApi.Provider | undefined;
 const machines: Map<string, MachineEntry> = new Map();
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_CONFIG: MachineConfig = {
   cpus: 2,
   memoryMb: 2048,
   diskGb: 20,
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function registerChaosProvider(extensionContext: extensionApi.ExtensionContext): void {
   // ---------------------------------------------------------------------------
   // #13: Register onboarding command and set onboarding context
@@ -86,7 +84,6 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
   // ---------------------------------------------------------------------------
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function registerMachineConnection(machineName: string, config: MachineConfig): void {
   const connectionDisposable = providerInstance!.registerContainerProviderConnection({
     name: machineName,
