@@ -150,16 +150,16 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   );
   extensionContext.subscriptions.push(viewContainerCommand);
 
-  // ---------------------------------------------------------------------------
-  // #7: Register a tray menu
-  // Register a submenu in the system tray with:
-  //   - id: 'chaos-lab.tray'
-  //   - label: 'Chaos Lab'
-  //   - Two items: 'Open Dashboard' (id: 'chaos-lab.openChaos')
-  //               and 'Stop All Chaos' (id: 'chaos-lab.stopAll')
-  // Push the returned disposable to extensionContext.subscriptions.
-  // Hint: extensionApi.tray.registerMenuItem({ id, type: 'submenu', label, submenu: [...] })
-  // ---------------------------------------------------------------------------
+  const trayItem = extensionApi.tray.registerMenuItem({
+    id: 'chaos-lab.tray',
+    type: 'submenu',
+    label: 'Chaos Lab',
+    submenu: [
+      { id: 'chaos-lab.openChaos', label: 'Open Dashboard', type: 'normal' },
+      { id: 'chaos-lab.stopAll', label: 'Stop All Chaos', type: 'normal' },
+    ],
+  });
+  extensionContext.subscriptions.push(trayItem);
 
   // ---------------------------------------------------------------------------
   // #14: Register a CLI tool
