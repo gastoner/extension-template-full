@@ -136,19 +136,19 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   });
   extensionContext.subscriptions.push(openChaosCommand);
 
-  // ---------------------------------------------------------------------------
-  // #6: Register the "View Container" command with webview messaging
-  // Register a command 'chaos-lab.viewContainerUsage' that receives a container
-  // object ({ id?: string; Id?: string }) as its argument.
-  // The command should:
-  //   1. Extract the container ID (container?.id ?? container?.Id)
-  //   2. Call panel.reveal() to show the webview
-  //   3. Wait for the webview to become visible (e.g. setTimeout ~200ms)
-  //   4. Post a message to the webview: { type: 'navigate', url: `/chaos/container/${containerId}` }
-  // Push the returned disposable to extensionContext.subscriptions.
-  // Hint: panel.webview.postMessage(message)
-  // Hint: await new Promise(resolve => setTimeout(resolve, 200))
-  // ---------------------------------------------------------------------------
+  const viewContainerCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.viewContainerUsage',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      panel.reveal();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await panel.webview.postMessage({
+        type: 'navigate',
+        url: `/chaos/container/${containerId}`,
+      });
+    },
+  );
+  extensionContext.subscriptions.push(viewContainerCommand);
 
   // ---------------------------------------------------------------------------
   // #7: Register a tray menu
