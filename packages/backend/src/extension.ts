@@ -106,15 +106,22 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   }
   extensionContext.subscriptions.push(chaosStatusBar);
 
-  // ---------------------------------------------------------------------------
-  // #3: Dynamically update the status bar text
-  // Set up a setInterval (every 3 seconds) that reads chaosEngine.getState()
-  // and updates chaosStatusBar.text:
-  //   - When runningAttacks > 0 → "Chaos Lab (N active)"
-  //   - Otherwise → "Chaos Lab"
-  // Store the interval handle in statusBarUpdateInterval.
-  // Push a disposable to extensionContext.subscriptions that clears the interval.
-  // ---------------------------------------------------------------------------
+  statusBarUpdateInterval = setInterval(() => {
+    const state = chaosEngine?.getState();
+    if (state && state.runningAttacks > 0) {
+      chaosStatusBar.text = `Chaos Lab (${state.runningAttacks} active)`;
+    } else {
+      chaosStatusBar.text = 'Chaos Lab';
+    }
+  }, 3000);
+  extensionContext.subscriptions.push({
+    dispose: () => {
+      if (statusBarUpdateInterval) {
+        clearInterval(statusBarUpdateInterval);
+        statusBarUpdateInterval = undefined;
+      }
+    },
+  });
 
   // ---------------------------------------------------------------------------
   // #4: Register the "Stop All Chaos" command
