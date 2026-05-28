@@ -12,6 +12,8 @@ import Scenarios from './chaos/Scenarios.svelte';
 import NetworkShaperPage from './chaos/NetworkShaper.svelte';
 import ResourceLimiterPage from './chaos/ResourceLimiter.svelte';
 import ContainerIsolatorPage from './chaos/ContainerIsolator.svelte';
+import StressInjectorPage from './chaos/StressInjector.svelte';
+import ConfigSabotagePage from './chaos/ConfigSabotage.svelte';
 import ContainerDetail from './chaos/ContainerDetail.svelte';
 
 router.mode.hash();
@@ -59,6 +61,12 @@ onDestroy(() => {
         </Route>
         <Route path="/chaos/isolate" breadcrumb="Container Isolator">
           <ContainerIsolatorPage />
+        </Route>
+        <Route path="/chaos/stress" breadcrumb="Stress Injector">
+          <StressInjectorPage />
+        </Route>
+        <Route path="/chaos/config" breadcrumb="Config Sabotage">
+          <ConfigSabotagePage />
         </Route>
         <Route path="/chaos/container/:id" breadcrumb="Container Detail" let:params>
           <ContainerDetail containerId={params.id} />

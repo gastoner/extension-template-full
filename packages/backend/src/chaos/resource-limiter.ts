@@ -69,12 +69,16 @@ export class ResourceLimiter {
     const cpuValue = (limit.cpuPercent / 100).toFixed(2);
     const memValue = `${limit.memoryMb}m`;
 
-    await extensionApi.process.exec('podman', [
-      'update',
-      '--cpus', cpuValue,
-      '--memory', memValue,
-      limit.containerId,
-    ]);
+    const args = ['update', '--cpus', cpuValue, '--memory', memValue];
+    if (limit.deviceReadBpsKB) {
+      args.push('--device-read-bps', `/dev/sda:${limit.deviceReadBpsKB}kb`);
+    }
+    if (limit.deviceWriteBpsKB) {
+      args.push('--device-write-bps', `/dev/sda:${limit.deviceWriteBpsKB}kb`);
+    }
+    args.push(limit.containerId);
+
+    await extensionApi.process.exec('podman', args);
 
     this.activeLimits.set(limit.containerId, limit);
     console.log(`Resource limits applied to ${limit.containerId}: CPU ${cpuValue}, MEM ${memValue}`);

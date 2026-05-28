@@ -19,9 +19,11 @@
 export interface ExtensionSettings {
   chaosSafeContainers: string[];
   showStatusBarChaos: boolean;
+  showNotifications: boolean;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   chaosSafeContainers: [],
   showStatusBarChaos: true,
+  showNotifications: true,
 };

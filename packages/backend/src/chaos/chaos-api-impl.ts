@@ -20,20 +20,44 @@ import * as extensionApi from '@podman-desktop/api';
 import type {
   ChaosApi,
   ChaosState,
+  ConfigSabotage,
   ContainerHealth,
   IsolationRule,
   NetworkRule,
   ResourceLimit,
+  SabotageType,
   Scenario,
+  StressInjection,
+  StressType,
 } from '/@shared/src/ChaosApi';
 import type { ChaosEngine } from './chaos-engine';
 import type { ContainerService } from '../container-service';
 
 export class ChaosApiImpl implements ChaosApi {
+  private notificationsEnabled = true;
+
   constructor(
     private readonly engine: ChaosEngine,
     private readonly containerService: ContainerService,
   ) {}
+
+  setNotificationsEnabled(enabled: boolean): void {
+    this.notificationsEnabled = enabled;
+  }
+
+  private notify(message: string, warn = false): void {
+    if (!this.notificationsEnabled) return;
+    if (warn) {
+      extensionApi.window.showWarningMessage(message);
+    } else {
+      extensionApi.window.showInformationMessage(message);
+    }
+  }
+
+  private async resolveContainerName(containerId: string): Promise<string> {
+    const containers = await this.containerService.listContainers();
+    return containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12);
+  }
 
   async getChaosState(): Promise<ChaosState> {
     return this.engine.getState();
@@ -57,6 +81,12 @@ export class ChaosApiImpl implements ChaosApi {
       }
       if (isolation) {
         attacks.push({ type: `isolation-${isolation.mode}`, target: c.name, startedAt: isolation.startedAt });
+      }
+      if (state.stressInjections[c.id]) {
+        attacks.push({ type: `stress-${state.stressInjections[c.id].type}`, target: c.name, startedAt: state.stressInjections[c.id].startedAt });
+      }
+      if (state.configSabotages[c.id]) {
+        attacks.push({ type: `config-${state.configSabotages[c.id].type}`, target: c.name, startedAt: state.configSabotages[c.id].startedAt });
       }
 
       return {
@@ -91,6 +121,7 @@ export class ChaosApiImpl implements ChaosApi {
       scenario.id = crypto.randomUUID();
     }
     this.engine.scheduler.addScenario(scenario);
+    this.notify(`Scenario '${scenario.name}' created`);
   }
 
   async deleteScenario(id: string): Promise<void> {
@@ -107,6 +138,12 @@ export class ChaosApiImpl implements ChaosApi {
 
   async applyNetworkRule(rule: NetworkRule): Promise<void> {
     await this.engine.networkShaper.applyRule(rule);
+    const name = await this.resolveContainerName(rule.containerId);
+    const parts: string[] = [];
+    if (rule.latencyMs) parts.push(`${rule.latencyMs}ms latency`);
+    if (rule.packetLossPercent) parts.push(`${rule.packetLossPercent}% loss`);
+    if (rule.bandwidthKbps) parts.push(`${rule.bandwidthKbps}kbps bandwidth`);
+    this.notify(`Network rule applied to ${name}: ${parts.join(', ')}`, true);
   }
 
   async removeNetworkRule(containerId: string): Promise<void> {
@@ -115,6 +152,11 @@ export class ChaosApiImpl implements ChaosApi {
 
   async applyResourceLimit(limit: ResourceLimit): Promise<void> {
     await this.engine.resourceLimiter.applyLimit(limit);
+    const name = await this.resolveContainerName(limit.containerId);
+    const parts = [`${(limit.cpuPercent / 100).toFixed(2)} CPU cores`, `${limit.memoryMb} MB RAM`];
+    if (limit.deviceReadBpsKB) parts.push(`${limit.deviceReadBpsKB} KB/s read`);
+    if (limit.deviceWriteBpsKB) parts.push(`${limit.deviceWriteBpsKB} KB/s write`);
+    this.notify(`Resource limit on ${name}: ${parts.join(', ')}`, true);
   }
 
   async removeResourceLimit(containerId: string): Promise<void> {
@@ -123,6 +165,7 @@ export class ChaosApiImpl implements ChaosApi {
 
   async isolateContainer(rule: IsolationRule): Promise<void> {
     await this.engine.isolator.isolate(rule);
+    this.notify(`Container ${rule.containerName} isolated (${rule.mode})`, true);
   }
 
   async restoreContainer(containerId: string): Promise<void> {
@@ -158,6 +201,44 @@ export class ChaosApiImpl implements ChaosApi {
     await extensionApi.process.exec('podman', [
       'exec', containerId, 'sh', '-c', installCmd,
     ]);
+  }
+
+  async injectStress(containerId: string, type: StressType, workers?: number, targetMb?: number): Promise<void> {
+    await this.engine.stressInjector.inject(containerId, type, workers, targetMb);
+    const name = await this.resolveContainerName(containerId);
+    this.notify(`${type} stress injected into ${name}`, true);
+  }
+
+  async stopStress(containerId: string): Promise<void> {
+    await this.engine.stressInjector.stop(containerId);
+  }
+
+  async listStressInjections(): Promise<StressInjection[]> {
+    return this.engine.stressInjector.listInjections();
+  }
+
+  async corruptConfig(containerId: string, type: SabotageType, targetFile?: string): Promise<void> {
+    await this.engine.configSaboteur.corrupt(containerId, type, targetFile);
+    const name = await this.resolveContainerName(containerId);
+    this.notify(`Config sabotage (${type}) applied to ${name}`, true);
+  }
+
+  async restoreConfig(containerId: string): Promise<void> {
+    await this.engine.configSaboteur.restore(containerId);
+  }
+
+  async listConfigSabotages(): Promise<ConfigSabotage[]> {
+    return this.engine.configSaboteur.listSabotages();
+  }
+
+  async enableChaosMode(intervalSec: number): Promise<void> {
+    await this.engine.enableChaosMode(intervalSec);
+    this.notify(`CHAOS MODE enabled — killing a random container every ${intervalSec}s`, true);
+  }
+
+  async disableChaosMode(): Promise<void> {
+    this.engine.disableChaosMode();
+    this.notify('Chaos Mode disabled');
   }
 
   private async detectPackageManager(containerId: string): Promise<string | undefined> {

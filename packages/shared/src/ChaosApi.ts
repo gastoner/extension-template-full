@@ -18,7 +18,7 @@
 
 import type { ContainerStats } from './ContainerTypes';
 
-export type AttackType = 'stop' | 'kill' | 'pause' | 'restart' | 'network-shape' | 'resource-limit' | 'network-disconnect';
+export type AttackType = 'stop' | 'kill' | 'pause' | 'restart' | 'network-shape' | 'resource-limit' | 'network-disconnect' | 'stress' | 'config-sabotage';
 
 export interface ScenarioStep {
   attackType: AttackType;
@@ -54,6 +54,29 @@ export interface ResourceLimit {
   containerId: string;
   cpuPercent: number;
   memoryMb: number;
+  deviceReadBpsKB?: number;
+  deviceWriteBpsKB?: number;
+}
+
+export type StressType = 'cpu' | 'memory' | 'log-flood';
+
+export interface StressInjection {
+  containerId: string;
+  containerName: string;
+  type: StressType;
+  workers?: number;
+  targetMb?: number;
+  startedAt: number;
+}
+
+export type SabotageType = 'dns-blackhole' | 'file-corrupt';
+
+export interface ConfigSabotage {
+  containerId: string;
+  containerName: string;
+  type: SabotageType;
+  targetFile?: string;
+  startedAt: number;
 }
 
 export interface IsolationRule {
@@ -87,10 +110,14 @@ export interface ContainerHealth {
 
 export interface ChaosState {
   runningAttacks: number;
+  killCount: number;
+  chaosModeActive: boolean;
   scenarios: Scenario[];
   networkRules: Record<string, NetworkRule>;
   resourceLimits: Record<string, ResourceLimit>;
   isolations: Record<string, IsolationRule>;
+  stressInjections: Record<string, StressInjection>;
+  configSabotages: Record<string, ConfigSabotage>;
 }
 
 export abstract class ChaosApi {
@@ -116,4 +143,15 @@ export abstract class ChaosApi {
 
   abstract checkContainerTool(containerId: string, tool: string): Promise<boolean>;
   abstract installContainerTool(containerId: string, tool: string): Promise<void>;
+
+  abstract injectStress(containerId: string, type: StressType, workers?: number, targetMb?: number): Promise<void>;
+  abstract stopStress(containerId: string): Promise<void>;
+  abstract listStressInjections(): Promise<StressInjection[]>;
+
+  abstract corruptConfig(containerId: string, type: SabotageType, targetFile?: string): Promise<void>;
+  abstract restoreConfig(containerId: string): Promise<void>;
+  abstract listConfigSabotages(): Promise<ConfigSabotage[]>;
+
+  abstract enableChaosMode(intervalSec: number): Promise<void>;
+  abstract disableChaosMode(): Promise<void>;
 }

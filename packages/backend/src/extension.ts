@@ -45,6 +45,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
 
   const chaosApiImpl = new ChaosApiImpl(chaosEngine, containerService);
+  chaosApiImpl.setNotificationsEnabled(settings.showNotifications);
 
   const panel = extensionApi.window.createWebviewPanel('chaos-lab', 'Chaos Lab', {
     localResourceRoots: [extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media')],
@@ -88,6 +89,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   settingsManager.onSettingsChanged(newSettings => {
     chaosEngine?.setSafePatterns(newSettings.chaosSafeContainers);
+    chaosApiImpl.setNotificationsEnabled(newSettings.showNotifications);
 
     if (chaosStatusBar) {
       if (newSettings.showStatusBarChaos) {
@@ -108,11 +110,19 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   statusBarUpdateInterval = setInterval(() => {
     const state = chaosEngine?.getState();
-    if (state && state.runningAttacks > 0) {
-      chaosStatusBar.text = `Chaos Lab (${state.runningAttacks} active)`;
-    } else {
+    if (!state) {
       chaosStatusBar.text = 'Chaos Lab';
+      return;
     }
+
+    const parts: string[] = [];
+    if (state.chaosModeActive) parts.push('CHAOS MODE');
+    if (state.runningAttacks > 0) parts.push(`${state.runningAttacks} active`);
+    if (state.killCount > 0) parts.push(`${state.killCount} killed`);
+
+    chaosStatusBar.text = parts.length > 0
+      ? `Chaos Lab (${parts.join(' | ')})`
+      : 'Chaos Lab';
   }, 3000);
   extensionContext.subscriptions.push({
     dispose: () => {
@@ -150,6 +160,68 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   );
   extensionContext.subscriptions.push(viewContainerCommand);
 
+  const freezeCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.freezeContainer',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) return;
+      const containers = await containerService.listContainers();
+      const target = containers.find(c => c.id === containerId);
+      const name = target?.name ?? containerId.substring(0, 12);
+      await chaosApiImpl.isolateContainer({
+        containerId,
+        containerName: name,
+        mode: 'pause',
+        startedAt: Date.now(),
+      });
+    },
+  );
+  extensionContext.subscriptions.push(freezeCommand);
+
+  const disconnectCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.disconnectContainer',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) return;
+      const networks = await containerService.getContainerNetworks(containerId);
+      const containers = await containerService.listContainers();
+      const target = containers.find(c => c.id === containerId);
+      const name = target?.name ?? containerId.substring(0, 12);
+      await chaosApiImpl.isolateContainer({
+        containerId,
+        containerName: name,
+        mode: 'network-disconnect',
+        disconnectedNetworks: networks,
+        startedAt: Date.now(),
+      });
+    },
+  );
+  extensionContext.subscriptions.push(disconnectCommand);
+
+  const killCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.killContainer',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) return;
+      await containerService.killContainer(containerId);
+      chaosEngine?.incrementKillCount();
+      const containers = await containerService.listContainers();
+      const name = containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12);
+      extensionApi.window.showWarningMessage(`Container ${name} killed`);
+    },
+  );
+  extensionContext.subscriptions.push(killCommand);
+
+  const stressCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.stressContainer',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) return;
+      await chaosApiImpl.injectStress(containerId, 'cpu', 1);
+    },
+  );
+  extensionContext.subscriptions.push(stressCommand);
+
   const trayItem = extensionApi.tray.registerMenuItem({
     id: 'chaos-lab.tray',
     type: 'submenu',
@@ -157,9 +229,22 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     submenu: [
       { id: 'chaos-lab.openChaos', label: 'Open Dashboard', type: 'normal' },
       { id: 'chaos-lab.stopAll', label: 'Stop All Chaos', type: 'normal' },
+      { id: 'chaos-lab.toggleChaosMode', label: 'Toggle Chaos Mode', type: 'normal' },
     ],
   });
   extensionContext.subscriptions.push(trayItem);
+
+  const toggleChaosModeCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.toggleChaosMode',
+    async () => {
+      if (chaosEngine?.chaosModeActive) {
+        await chaosApiImpl.disableChaosMode();
+      } else {
+        await chaosApiImpl.enableChaosMode(30);
+      }
+    },
+  );
+  extensionContext.subscriptions.push(toggleChaosModeCommand);
 
   registerChaosProvider(extensionContext);
 

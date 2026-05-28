@@ -62,6 +62,8 @@ export class SettingsManager {
       ),
       showStatusBarChaos:
         config.get<boolean>('showStatusBarChaos') ?? DEFAULT_SETTINGS.showStatusBarChaos,
+      showNotifications:
+        config.get<boolean>('showNotifications') ?? DEFAULT_SETTINGS.showNotifications,
     };
   }
 

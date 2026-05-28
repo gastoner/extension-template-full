@@ -20,6 +20,7 @@ import type { AttackType, Scenario, ScenarioStep } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { NetworkShaper } from './network-shaper';
 import type { ResourceLimiter } from './resource-limiter';
+import type { ChaosEngine } from './chaos-engine';
 
 interface AffectedContainer {
   attackType: AttackType;
@@ -40,6 +41,7 @@ export class ScenarioScheduler {
     private readonly containerService: ContainerService,
     private readonly networkShaper: NetworkShaper,
     private readonly resourceLimiter: ResourceLimiter,
+    private readonly engine: ChaosEngine,
   ) {}
 
   setSafePatterns(patterns: string[]): void {
@@ -206,10 +208,12 @@ export class ScenarioScheduler {
       case 'stop':
         await this.containerService.stopContainer(target.engineId, target.id);
         entry.affectedContainers.set(target.id, { attackType: 'stop', engineId: target.engineId });
+        this.engine.incrementKillCount();
         break;
       case 'kill':
         await this.containerService.killContainer(target.id);
         entry.affectedContainers.set(target.id, { attackType: 'kill', engineId: target.engineId });
+        this.engine.incrementKillCount();
         break;
       case 'pause':
         await this.containerService.pauseContainer(target.id);

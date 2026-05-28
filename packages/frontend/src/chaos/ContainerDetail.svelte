@@ -46,9 +46,9 @@ let hasCpuLimit: boolean = $derived(dataPoints.some(p => p.cpuLimitPercent > 0))
 let cpuData: uPlot.AlignedData = $derived.by(() => {
   if (!dataPoints.length) return hasCpuLimit ? [[], [], []] : [[], []];
   const ts = dataPoints.map(p => p.timestamp / 1000);
-  const cpu = dataPoints.map(p => p.cpuPercent);
+  const cpu = dataPoints.map(p => p.cpuPercent / 100);
   if (hasCpuLimit) {
-    return [ts, cpu, dataPoints.map(p => p.cpuLimitPercent)];
+    return [ts, cpu, dataPoints.map(p => p.cpuLimitPercent / 100)];
   }
   return [ts, cpu];
 });
@@ -82,7 +82,7 @@ let blockData: uPlot.AlignedData = $derived.by(() => {
 
 let cpuSeries: uPlot.Series[] = $derived.by(() => {
   const base: uPlot.Series[] = [
-    { label: 'CPU %', stroke: getComputedColor('--pd-status-running'), width: 2 },
+    { label: 'vCPU', stroke: getComputedColor('--pd-status-running'), width: 2 },
   ];
   if (hasCpuLimit) {
     base.push({ label: 'Limit', stroke: getComputedColor('--pd-status-degraded'), width: 1, dash: [5, 5] });
@@ -204,7 +204,7 @@ onMount(() => {
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
               <div class="text-[10px] text-[var(--pd-content-text)] uppercase">CPU</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
-                {latestStats.cpuPercent.toFixed(1)}%{#if latestStats.cpuLimitPercent > 0} / {latestStats.cpuLimitPercent.toFixed(0)}%{/if}
+                {(latestStats.cpuPercent / 100).toFixed(2)}{#if latestStats.cpuLimitPercent > 0} / {(latestStats.cpuLimitPercent / 100).toFixed(1)}{/if} vCPU
               </div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
@@ -224,7 +224,7 @@ onMount(() => {
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-4">
-            <UPlotChart title="CPU Usage" data={cpuData} series={cpuSeries} yFormatter={v => `${v.toFixed(1)}%`} />
+            <UPlotChart title="CPU Usage (vCPU)" data={cpuData} series={cpuSeries} yFormatter={v => `${v.toFixed(2)} vCPU`} />
           </div>
           <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-4">
             <UPlotChart title="Memory Usage" data={memData} series={memSeries} yFormatter={formatMb} />

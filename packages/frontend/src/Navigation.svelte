@@ -8,6 +8,8 @@ import {
   faTachometerAlt,
   faBan,
   faTornado,
+  faFire,
+  faBiohazard,
 } from '@fortawesome/free-solid-svg-icons';
 import type { TinroRouteMeta } from 'tinro';
 
@@ -57,5 +59,15 @@ let { meta }: Props = $props();
       title="Container Isolator"
       selected={meta.url === '/chaos/isolate'}
       href="/chaos/isolate" />
+    <SettingsNavItem
+      icon={faFire}
+      title="Stress Injector"
+      selected={meta.url === '/chaos/stress'}
+      href="/chaos/stress" />
+    <SettingsNavItem
+      icon={faBiohazard}
+      title="Config Sabotage"
+      selected={meta.url === '/chaos/config'}
+      href="/chaos/config" />
   </div>
 </nav>

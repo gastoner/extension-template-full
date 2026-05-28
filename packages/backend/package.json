@@ -17,16 +17,13 @@
       {
         "command": "chaos-lab.stopAll",
         "title": "Chaos Lab: Stop All Chaos"
+      },
+      {
+        "command": "chaos-lab.toggleChaosMode",
+        "title": "Chaos Lab: Toggle Chaos Mode"
       }
     ],
-    "menus": {
-      "dashboard/container": [
-        {
-          "command": "chaos-lab.viewContainerUsage",
-          "title": "View Container (Chaos Lab)"
-        }
-      ]
-    },
+    "menus": {},
     "configuration": {
       "title": "Chaos Lab",
       "properties": {
@@ -39,6 +36,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show the Chaos mode indicator in the status bar."
+        },
+        "chaos-lab.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show toast notifications when chaos actions fire."
         },
         "chaos.machine.cpus": {
           "type": "number",
