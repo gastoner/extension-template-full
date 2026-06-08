@@ -190,6 +190,13 @@ export class ChaosApiImpl implements ChaosApi {
         return `${pm} install ${pkg}`;
     }
   }
+
+  async resetOnboarding(): Promise<void> {
+    await extensionApi.context.setValue('chaosProviderReady', false, 'onboarding');
+    await extensionApi.context.setValue('chaosMachineCreationFailed', false, 'onboarding');
+    const nav = extensionApi.navigation as unknown as Record<string, (id: string) => Promise<void>>;
+    await nav.navigateToOnboarding('yourusername.chaos-lab');
+  }
 }
 
 const TOOL_PACKAGES: Record<string, Record<string, string>> = {

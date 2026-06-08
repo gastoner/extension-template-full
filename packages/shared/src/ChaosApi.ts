@@ -123,4 +123,6 @@ export abstract class ChaosApi {
 
   abstract checkContainerTool(containerId: string, tool: string): Promise<boolean>;
   abstract installContainerTool(containerId: string, tool: string): Promise<void>;
+
+  abstract resetOnboarding(): Promise<void>;
 }
