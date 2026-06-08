@@ -75,17 +75,17 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   async stopAllChaos(): Promise<void> {
-    // -------------------------------------------------------------------------
-    // #1: Show a progress task while stopping all chaos
-    // Wrap the call to this.engine.stopAll() inside extensionApi.window.withProgress():
-    //   - location: extensionApi.ProgressLocation.TASK_WIDGET
-    //   - title: 'Stop All Chaos'
-    // Inside the callback, use progress.report({ message }) to show status,
-    // then call this.engine.stopAll(), then report completion with increment: 100.
-    // Bonus: use increment (0–100) in progress.report() to show intermediate progress steps.
-    // Hint: extensionApi.window.withProgress({ location, title }, async (progress) => { ... })
-    // -------------------------------------------------------------------------
-    await this.engine.stopAll();
+    await extensionApi.window.withProgress(
+      { location: extensionApi.ProgressLocation.TASK_WIDGET, title: 'Stop All Chaos' },
+      async progress => {
+        progress.report({ increment: 0, message: 'Stopping all chaos operations...' });
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        progress.report({ increment: 50, message: 'Hacking NASA in meantime...' });
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        await this.engine.stopAll();
+        progress.report({ increment: 100, message: 'All chaos operations stopped' });
+      },
+    );
   }
 
   async createScenario(scenario: Scenario): Promise<void> {
