@@ -21,7 +21,7 @@ import type { NavigationBar, Runner } from '@podman-desktop/tests-playwright';
 import { expect as playExpect } from '@podman-desktop/tests-playwright';
 
 export async function handleWebview(runner: Runner, page: Page, navigationBar: NavigationBar): Promise<[Page, Page]> {
-  const CHAOSLAB_NAVBAR_EXTENSION_LABEL: string = 'ChaosLab';
+  const CHAOSLAB_NAVBAR_EXTENSION_LABEL: string = 'Chaos Lab';
   const CHAOSLAB_PAGE_BODY_LABEL: string = `Webview ${CHAOSLAB_NAVBAR_EXTENSION_LABEL}`;
 
   const navButton = navigationBar.navigationLocator.getByRole('link', {

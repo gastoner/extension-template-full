@@ -66,8 +66,7 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
       icon: './icon.png',
       logo: { dark: './icon.png', light: './icon.png' },
     },
-    emptyConnectionMarkdownDescription:
-      'No Chaos machines running. Click **Create** to spin up a new Chaos machine.',
+    emptyConnectionMarkdownDescription: 'No Chaos machines running. Click **Create** to spin up a new Chaos machine.',
   });
 
   extensionContext.subscriptions.push(providerInstance);
@@ -180,7 +179,9 @@ function registerMachineConnection(machineName: string, config: MachineConfig): 
           entry.status = 'started';
         }
 
-        log?.log(`Machine '${machineName}' updated: ${entry.config.cpus} CPUs, ${entry.config.memoryMb} MB RAM, ${entry.config.diskGb} GB disk`);
+        log?.log(
+          `Machine '${machineName}' updated: ${entry.config.cpus} CPUs, ${entry.config.memoryMb} MB RAM, ${entry.config.diskGb} GB disk`,
+        );
       },
     },
   });

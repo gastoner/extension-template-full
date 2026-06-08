@@ -24,6 +24,8 @@ import {
   waitForPodmanMachineStartup,
 } from '@podman-desktop/tests-playwright';
 import { ExtensionChaosLabDetailsPage } from 'src/model/chaoslab-extension-details-page';
+import { ChaosLabNavigationBar } from 'src/model/chaoslab-navigation-bar';
+import { handleWebview } from 'src/utils/webviewHandler';
 
 const CHAOSLAB_EXTENSION_OCI_IMAGE =
   process.env.EXTENSION_OCI_IMAGE ?? 'ghcr.io/podman-desktop/pd-extension-chaoslab:latest';
@@ -117,6 +119,38 @@ test.describe.serial(`ChaosLab extension installation and verification`, { tag: 
         stackTrace = await details.errorStackTrace.innerText();
       }
       await playExpect(errorTab, `Error Tab was present with stackTrace: ${stackTrace}`).not.toBeVisible();
+    });
+  });
+
+  test.describe.serial(`ChaosLab webview navigation`, () => {
+    let chaosLabNavBar: ChaosLabNavigationBar;
+
+    test(`Open ChaosLab webview and verify dashboard heading`, async ({ runner, page, navigationBar }) => {
+      const [mainPage, webViewPage] = await handleWebview(runner, page, navigationBar);
+      chaosLabNavBar = new ChaosLabNavigationBar(mainPage, webViewPage);
+      await chaosLabNavBar.waitForLoad();
+      const dashboardPage = await chaosLabNavBar.openDashboard();
+      await playExpect(dashboardPage.heading).toBeVisible();
+    });
+
+    test(`Open Scenarios page and verify heading`, async () => {
+      const scenariosPage = await chaosLabNavBar.openScenariosCatalog();
+      await playExpect(scenariosPage.heading).toBeVisible();
+    });
+
+    test(`Open Network Shaper page and verify heading`, async () => {
+      const networkShaperPage = await chaosLabNavBar.openNetworkShaper();
+      await playExpect(networkShaperPage.heading).toBeVisible();
+    });
+
+    test(`Open Resource Limiter page and verify heading`, async () => {
+      const resourceLimiterPage = await chaosLabNavBar.openResourceLimiter();
+      await playExpect(resourceLimiterPage.heading).toBeVisible();
+    });
+
+    test(`Open Container Isolator page and verify heading`, async () => {
+      const containerIsolatorPage = await chaosLabNavBar.openContainerIsolator();
+      await playExpect(containerIsolatorPage.heading).toBeVisible();
     });
   });
 });
