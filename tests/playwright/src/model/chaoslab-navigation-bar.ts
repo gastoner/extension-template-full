@@ -19,7 +19,10 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect as playExpect } from '@playwright/test';
 import { ChaosLabBasePage } from 'src/model/chaoslab-base-page';
+import { ChaosLabContainerIsolatorPage } from 'src/model/chaoslab-container-isolator-page';
 import { ChaosLabDashboardPage } from 'src/model/chaoslab-dashboard-page';
+import { ChaosLabNetworkShaperPage } from 'src/model/chaoslab-network-shaper-page';
+import { ChaosLabResourceLimiterPage } from 'src/model/chaoslab-resource-limiter-page';
 import { ChaosLabScenariosPage } from 'src/model/chaoslab-scenarios-page';
 
 export class ChaosLabNavigationBar extends ChaosLabBasePage {
@@ -32,7 +35,7 @@ export class ChaosLabNavigationBar extends ChaosLabBasePage {
 
   constructor(page: Page, webview: Page) {
     super(page, webview, undefined);
-    this.navigationBar = this.webview.getByRole('navigation', { name: 'PreferencesNavigation' });
+    this.navigationBar = this.webview.getByRole('navigation', { name: 'ChaosLabNavigation' });
     this.dashboardButton = this.navigationBar.getByRole('link', { name: 'Dashboard', exact: true });
     this.scenariosButton = this.navigationBar.getByRole('link', { name: 'Scenarios', exact: true });
     this.networkShaperButton = this.navigationBar.getByRole('link', { name: 'Network Shaper', exact: true });
@@ -54,5 +57,23 @@ export class ChaosLabNavigationBar extends ChaosLabBasePage {
     await playExpect(this.scenariosButton).toBeVisible();
     await this.scenariosButton.click();
     return new ChaosLabScenariosPage(this.page, this.webview);
+  }
+
+  async openNetworkShaper(): Promise<ChaosLabNetworkShaperPage> {
+    await playExpect(this.networkShaperButton).toBeVisible();
+    await this.networkShaperButton.click();
+    return new ChaosLabNetworkShaperPage(this.page, this.webview);
+  }
+
+  async openResourceLimiter(): Promise<ChaosLabResourceLimiterPage> {
+    await playExpect(this.resourceLimiterButton).toBeVisible();
+    await this.resourceLimiterButton.click();
+    return new ChaosLabResourceLimiterPage(this.page, this.webview);
+  }
+
+  async openContainerIsolator(): Promise<ChaosLabContainerIsolatorPage> {
+    await playExpect(this.containerIsolatorButton).toBeVisible();
+    await this.containerIsolatorButton.click();
+    return new ChaosLabContainerIsolatorPage(this.page, this.webview);
   }
 }

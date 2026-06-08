@@ -125,9 +125,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
     await chaosApiImpl.stopAllChaos();
-    extensionApi.window.showInformationMessage(
-      'All chaos operations have been stopped and rolled back.',
-    );
+    await extensionApi.window.showInformationMessage('All chaos operations have been stopped and rolled back.');
   });
   extensionContext.subscriptions.push(stopAllCommand);
 
