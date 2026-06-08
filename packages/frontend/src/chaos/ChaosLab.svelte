@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Button, NavPage, EmptyScreen, StatusIcon, Spinner, Tooltip, ErrorMessage } from '@podman-desktop/ui-svelte';
-import { faBolt, faCubes } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faCubes, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { router } from 'tinro';
 import { onMount } from 'svelte';
 import { chaosClient } from '../api/client';
@@ -11,6 +11,10 @@ let containers: ContainerHealth[] = $state([]);
 let loading = $state(true);
 let errorMessage = $state('');
 let actionInProgress = $state(false);
+
+async function resetOnboarding(): Promise<void> {
+  await chaosClient.resetOnboarding();
+}
 
 async function refresh(): Promise<void> {
   try {
@@ -74,6 +78,7 @@ onMount(() => {
           </span>
         </Tooltip>
       {/if}
+      <Button type="secondary" onclick={resetOnboarding} icon={faRotateRight}>Reset Onboarding</Button>
       {#if chaosState && chaosState.runningAttacks > 0}
         <Button type="danger" onclick={stopAll} icon={faBolt} disabled={actionInProgress}>Stop All Chaos</Button>
       {/if}
