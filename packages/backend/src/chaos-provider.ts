@@ -40,22 +40,14 @@ const DEFAULT_CONFIG: MachineConfig = {
 };
 
 export function registerChaosProvider(extensionContext: extensionApi.ExtensionContext): void {
-  // ---------------------------------------------------------------------------
-  // #13: Register onboarding command and set onboarding context
-  // Register a command 'chaos-lab.onboarding.checkProvider' that:
-  //   1. Checks if any machines exist (machines.size > 0)
-  //   2. Sets onboarding context value 'chaosProviderReady' to true or false
-  // Push the returned disposable to extensionContext.subscriptions.
-  //
-  // Then, in the connection factory create callback (#11), after a successful
-  // machine creation, set 'chaosProviderReady' = true.
-  // On failure, set 'chaosMachineCreationFailed' = true.
-  //
-  // The onboarding UI is defined declaratively in package.json (contributes.onboarding).
-  // Podman Desktop renders it automatically — your code just needs to set context values.
-  // Hint: extensionApi.context.setValue(key, value, 'onboarding')
-  // Hint: extensionApi.commands.registerCommand(id, callback)
-  // ---------------------------------------------------------------------------
+  const checkProviderDisposable = extensionApi.commands.registerCommand(
+    'chaos-lab.onboarding.checkProvider',
+    async () => {
+      const ready = machines.size > 0;
+      extensionApi.context.setValue('chaosProviderReady', ready, 'onboarding');
+    },
+  );
+  extensionContext.subscriptions.push(checkProviderDisposable);
 
   providerInstance = extensionApi.provider.createProvider({
     id: 'chaos',
@@ -88,9 +80,15 @@ export function registerChaosProvider(extensionContext: extensionApi.ExtensionCo
 
       logger?.log(`Creating Chaos machine '${machineName}' (${cpus} CPUs, ${memoryMb} MB RAM, ${diskGb} GB disk)...`);
 
-      registerMachineConnection(machineName, config);
-      providerInstance?.updateStatus('ready');
-      logger?.log(`Chaos machine '${machineName}' created and running`);
+      try {
+        registerMachineConnection(machineName, config);
+        providerInstance?.updateStatus('ready');
+        logger?.log(`Chaos machine '${machineName}' created and running`);
+        extensionApi.context.setValue('chaosProviderReady', true, 'onboarding');
+      } catch (err) {
+        extensionApi.context.setValue('chaosMachineCreationFailed', true, 'onboarding');
+        throw err;
+      }
     },
   });
 }
