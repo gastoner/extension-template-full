@@ -8,9 +8,176 @@
   "private": true,
   "engines": {
     "node": ">=24.0.0",
-    "npm": ">=11.0.0"
+    "npm": ">=11.0.0",
+    "podman-desktop": ">=1.17.0"
   },
   "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "chaos-lab.stopAll",
+        "title": "Chaos Lab: Stop All Chaos"
+      },
+      {
+        "command": "chaos-lab.onboarding.checkProvider",
+        "title": "Chaos Lab: Check Provider Status"
+      }
+    ],
+    "menus": {
+      "dashboard/container": [
+        {
+          "command": "chaos-lab.viewContainerUsage",
+          "title": "View Container (Chaos Lab)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Chaos Lab",
+      "properties": {
+        "chaos-lab.chaosSafeContainers": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated container name patterns that should never be targeted by chaos or isolation (supports * wildcards). Example: 'postgres*,redis-prod'."
+        },
+        "chaos-lab.showStatusBarChaos": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Chaos mode indicator in the status bar."
+        },
+        "chaos.machine.cpus": {
+          "type": "number",
+          "format": "cpu",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 2,
+          "scope": "ContainerConnection",
+          "description": "CPU(s)"
+        },
+        "chaos.machine.memory": {
+          "type": "number",
+          "format": "memory",
+          "minimum": 536870912,
+          "default": 2147483648,
+          "maximum": 34359738368,
+          "scope": "ContainerConnection",
+          "description": "Memory"
+        },
+        "chaos.machine.diskSize": {
+          "type": "number",
+          "format": "diskSize",
+          "default": 21474836480,
+          "minimum": 10737418240,
+          "maximum": 536870912000,
+          "scope": "ContainerConnection",
+          "description": "Disk size"
+        },
+        "chaos.factory.machine.name": {
+          "type": "string",
+          "default": "chaos-default",
+          "scope": "ContainerProviderConnectionFactory",
+          "description": "Name"
+        },
+        "chaos.factory.machine.cpus": {
+          "type": "number",
+          "format": "cpu",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 16,
+          "scope": "ContainerProviderConnectionFactory",
+          "description": "CPU(s)"
+        },
+        "chaos.factory.machine.memory": {
+          "type": "number",
+          "format": "memory",
+          "default": 2147483648,
+          "minimum": 536870912,
+          "maximum": 34359738368,
+          "scope": "ContainerProviderConnectionFactory",
+          "description": "Memory"
+        },
+        "chaos.factory.machine.diskSize": {
+          "type": "number",
+          "format": "diskSize",
+          "default": 21474836480,
+          "minimum": 10737418240,
+          "maximum": 536870912000,
+          "scope": "ContainerProviderConnectionFactory",
+          "description": "Disk size"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "Chaos Lab Setup",
+      "enablement": "!onboardingContext:chaosProviderReady",
+      "steps": [
+        {
+          "id": "checkProviderCommand",
+          "label": "Check Provider",
+          "title": "Checking for Chaos provider",
+          "command": "chaos-lab.onboarding.checkProvider",
+          "completionEvents": [
+            "onCommand:chaos-lab.onboarding.checkProvider"
+          ]
+        },
+        {
+          "id": "welcomeView",
+          "label": "Setup",
+          "title": "Chaos Lab Setup",
+          "when": "!onboardingContext:chaosProviderReady",
+          "content": [
+            [
+              {
+                "value": "Chaos Lab needs a Chaos Machine to run chaos experiments against your containers."
+              }
+            ],
+            [
+              {
+                "value": "The next step will create a Chaos Machine using the provider's connection factory. You can customize CPU, memory, and disk settings.",
+                "highlight": true
+              }
+            ]
+          ]
+        },
+        {
+          "id": "createMachineView",
+          "label": "Create Machine",
+          "title": "Create a Chaos Machine",
+          "when": "!onboardingContext:chaosProviderReady",
+          "component": "createContainerProviderConnection",
+          "completionEvents": [
+            "onboardingContext:chaosProviderReady"
+          ]
+        },
+        {
+          "id": "createMachineFailure",
+          "title": "Failed creating Chaos Machine",
+          "when": "onboardingContext:chaosMachineCreationFailed",
+          "state": "failed",
+          "content": [
+            [
+              {
+                "value": "Failed to create the Chaos Machine. :button[Retry setup]{command=chaos-lab.onboarding.checkProvider}"
+              }
+            ]
+          ]
+        },
+        {
+          "id": "setupSuccess",
+          "title": "Chaos Lab is ready",
+          "when": "onboardingContext:chaosProviderReady",
+          "state": "completed",
+          "content": [
+            [
+              {
+                "value": "#### Chaos Lab is ready!\nYour Chaos Machine has been created. Open the **Chaos Lab Dashboard** to start running chaos experiments.\n\n:button[Open Dashboard]{command=chaos-lab.openChaos}",
+                "highlight": true
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  },
   "scripts": {
     "build": "vite build",
     "test": "vitest run --coverage",
@@ -26,7 +193,7 @@
     "@types/node": "^24",
     "@typescript-eslint/eslint-plugin": "^8.1.0",
     "@typescript-eslint/parser": "^6.16.0",
-    "@vitest/coverage-v8": "^3.1.1",
+    "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^8.56.0",
     "eslint-import-resolver-custom-alias": "^1.3.2",
     "eslint-import-resolver-typescript": "^3.6.1",
@@ -40,7 +207,5 @@
     "vite": "8.0.16",
     "vitest": "^4.1.0"
   },
-  "dependencies": {
-    "semver": "^7.6.3"
-  }
+  "dependencies": {}
 }

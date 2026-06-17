@@ -14,11 +14,11 @@ Chaos engineering toolkit for Podman Desktop. Inject faults, shape network traff
 
 ## Architecture
 
-| Package | Description |
-|---------|-------------|
-| `packages/backend` | Extension entry point, Podman API calls, chaos engine, settings |
+| Package             | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `packages/backend`  | Extension entry point, Podman API calls, chaos engine, settings |
 | `packages/frontend` | Svelte 5 + TailwindCSS dashboard with @podman-desktop/ui-svelte |
-| `packages/shared` | RPC types and message proxy connecting frontend ↔ backend |
+| `packages/shared`   | RPC types and message proxy connecting frontend ↔ backend       |
 
 ## Workshop
 
@@ -35,23 +35,23 @@ Load the extension in Podman Desktop and start filling in the numbered TODOs. Ea
 
 ### Branch progression
 
-| Branch | TODO | API taught | File |
-|--------|------|-----------|------|
-| `workshop/01-progress-task` | #1 | `withProgress` | `chaos-api-impl.ts` |
-| `workshop/02-status-bar` | #2 | `createStatusBarItem` | `extension.ts` |
-| `workshop/03-status-bar-dynamic` | #3 | Dynamic status bar updates via `setInterval` | `extension.ts` |
-| `workshop/04-command-stop-all` | #4 | `commands.registerCommand`, `showInformationMessage` | `extension.ts` |
-| `workshop/05-command-open-dashboard` | #5 | Command + `panel.reveal()` | `extension.ts` |
-| `workshop/06-command-view-container` | #6 | Command + `webview.postMessage` | `extension.ts` |
-| `workshop/07-tray-menu` | #7 | `tray.registerMenuItem` with submenu | `extension.ts` |
-| `workshop/08-config-change-listener` | #8 | `onDidChangeConfiguration` | `settings-manager.ts` |
-| `workshop/09-config-read-values` | #9 | `configuration.getConfiguration` | `settings-manager.ts` |
-| `workshop/10-create-provider` | #10 | `provider.createProvider` | `chaos-provider.ts` |
-| `workshop/11-connection-factory` | #11 | `setContainerProviderConnectionFactory` | `chaos-provider.ts` |
-| `workshop/12-ci-workflows` | #12 | CI/CD: nightly + release image builds | `.github/workflows/` |
-| `workshop/13-onboarding` | #13 | `context.setValue` + onboarding workflow | `chaos-provider.ts` |
-| `workshop/14-cli-tool` | #14 | `cli.createCliTool` | `extension.ts` |
-| `dev_conf` | — | All TODOs completed (final) | — |
+| Branch                               | TODO | API taught                                           | File                  |
+| ------------------------------------ | ---- | ---------------------------------------------------- | --------------------- |
+| `workshop/01-progress-task`          | #1   | `withProgress`                                       | `chaos-api-impl.ts`   |
+| `workshop/02-status-bar`             | #2   | `createStatusBarItem`                                | `extension.ts`        |
+| `workshop/03-status-bar-dynamic`     | #3   | Dynamic status bar updates via `setInterval`         | `extension.ts`        |
+| `workshop/04-command-stop-all`       | #4   | `commands.registerCommand`, `showInformationMessage` | `extension.ts`        |
+| `workshop/05-command-open-dashboard` | #5   | Command + `panel.reveal()`                           | `extension.ts`        |
+| `workshop/06-command-view-container` | #6   | Command + `webview.postMessage`                      | `extension.ts`        |
+| `workshop/07-tray-menu`              | #7   | `tray.registerMenuItem` with submenu                 | `extension.ts`        |
+| `workshop/08-config-change-listener` | #8   | `onDidChangeConfiguration`                           | `settings-manager.ts` |
+| `workshop/09-config-read-values`     | #9   | `configuration.getConfiguration`                     | `settings-manager.ts` |
+| `workshop/10-create-provider`        | #10  | `provider.createProvider`                            | `chaos-provider.ts`   |
+| `workshop/11-connection-factory`     | #11  | `setContainerProviderConnectionFactory`              | `chaos-provider.ts`   |
+| `workshop/12-ci-workflows`           | #12  | CI/CD: nightly + release image builds                | `.github/workflows/`  |
+| `workshop/13-onboarding`             | #13  | `context.setValue` + onboarding workflow             | `chaos-provider.ts`   |
+| `workshop/14-cli-tool`               | #14  | `cli.createCliTool`                                  | `extension.ts`        |
+| `dev_conf`                           | —    | All TODOs completed (final)                          | —                     |
 
 ### Quick reference
 
@@ -60,6 +60,7 @@ Every workshop branch includes a `SKILL.md` file at the repo root with an API ch
 ## Development of the extension against production Podman Desktop (1.27.2)
 
 In the extension's root folder:
+
 ```sh
 npm install
 npm run build    # or: npm run watch
@@ -77,8 +78,7 @@ We will load the extension within Podman Desktop to test it. This requires Podma
 4. Click on the 'Add a local folder...' button and select the path of the `packages/backend` folder of this extension and click OK.
 5. Now the extension is part of Podman Desktop and you can see it listed in the `installed` tab of the Extensions panel.
 
-
-5. Confirm that the extension has been loaded:
+6. Confirm that the extension has been loaded:
 
 You will now see a "Hello World" or "ChaosLab" (depends on the branch/state of the repository) webview in the Podman Desktop navbar. You can also check the developer console for any logging information indicating that the extension has been loaded successfully.
 
@@ -89,6 +89,7 @@ Example of extension loading:
 ## Alternative Development method: Extension development againts development version of Podman Desktop (nightly) with Auto Reload
 
 Prerequisities: Nodejs v24.15.0, npm and pnpm!
+
 ```sh
 npm install -g pnpm@10
 ```
@@ -102,12 +103,14 @@ pnpm install
 ```
 
 And run the podman-desktop in the watch mode with a link to extension's folder (so we can enable auto-reload)
+
 ```sh
 # in podman-desktop root folder
 pnpm watch --extension-folder ~/git/extension-template-full/packages/backend/
 ```
 
 Run the extension in the watch mode
+
 ```sh
 cd extension-template-full
 npm install
@@ -121,21 +124,25 @@ Enjoy auto-reload of the changes done on the extension's side in the running ins
 We include additional tools to assist in development, which can be found in the main `package.json` file.
 
 Formatter:
+
 ```sh
 $ npm run format:fix
 ```
 
 Linter:
+
 ```sh
 $ npm run lint:fix
 ```
 
 Typechecker:
+
 ```sh
 $ npm run typecheck
 ```
 
 Unit tests:
+
 ```sh
 $ npm run test
 ```
@@ -166,9 +173,9 @@ COPY --from=builder /app/packages/backend/icon.png /extension/
 COPY --from=builder /app/README.md /extension/
 
 LABEL org.opencontainers.image.title="Podman Desktop Chaos Lab Extension" \
-        org.opencontainers.image.description="Containers durability harness tool" \
-        org.opencontainers.image.vendor="DevConf Podman Desktop / Extension demo" \
-        io.podman-desktop.api.version=">= 1.22.0"
+org.opencontainers.image.description="Containers durability harness tool" \
+org.opencontainers.image.vendor="DevConf Podman Desktop / Extension demo" \
+io.podman-desktop.api.version=">= 1.22.0"
 ```
 
 Build the extension image
@@ -204,7 +211,6 @@ podman rmi -f localhost/chaos-lab:latest
 
 Now if we start Podman Desktop, we should see the Chaos Lab extension installed in the navigation bar.
 
-
 ## Publishing from Local Machine
 
 More information on how to package and publish your extension can be found in our [official publishing documentation](https://podman-desktop.io/docs/extensions/publish).
@@ -216,6 +222,7 @@ $ podman build -t quay.io/myusername/myextension .
 ```
 
 2. Log into container registry (ie. quay.io)
+
 ```sh
 podman login quay.io
 ```
@@ -235,13 +242,13 @@ $ podman push quay.io/myusername/myextension
 ### Pull Request check workflow yaml file
 
 1. Standard event trigger definition for GH actions workflows:
+
 ```yaml
 name: pr-check
 
 on: [pull_request]
 
-jobs:
-  ...
+jobs: ...
 ```
 
 2. Install deps, build, lint, format and unit tests run
@@ -288,22 +295,22 @@ jobs:
 3. Image builder step
 
 ```yaml
-  # Dedicated step to build the chaos lab extension image
-  build-container:
-    name: Build Extension Image
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+# Dedicated step to build the chaos lab extension image
+build-container:
+  name: Build Extension Image
+  runs-on: ubuntu-24.04
+  steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Build Image and Extract Files
-        id: build-image
-        run: |
-          podman build -t local_image ./
-          CONTAINER_ID=$(podman create localhost/local_image --entrypoint "")
-          mkdir -p output/plugins
-          podman export $CONTAINER_ID | tar -x -C output/plugins/
-          podman rm -f $CONTAINER_ID
-          podman rmi -f localhost/local_image:latest
+    - name: Build Image and Extract Files
+      id: build-image
+      run: |
+        podman build -t local_image ./
+        CONTAINER_ID=$(podman create localhost/local_image --entrypoint "")
+        mkdir -p output/plugins
+        podman export $CONTAINER_ID | tar -x -C output/plugins/
+        podman rm -f $CONTAINER_ID
+        podman rmi -f localhost/local_image:latest
 ```
 
 ### Build Next/CI for nightly extension OCI image on ghcr.io

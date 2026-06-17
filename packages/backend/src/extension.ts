@@ -1,72 +1,195 @@
+/**********************************************************************
+ * Copyright (C) 2026 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ***********************************************************************/
+
 import type { ExtensionContext } from '@podman-desktop/api';
 import * as extensionApi from '@podman-desktop/api';
 import fs from 'node:fs';
 import { RpcExtension } from '/@shared/src/messages/MessageProxy';
-import { helloWorldApi } from './api-impl';
+import { ContainerService } from './container-service';
+import { ChaosEngine } from './chaos/chaos-engine';
+import { ChaosApiImpl } from './chaos/chaos-api-impl';
+import { SettingsManager } from './settings-manager';
+import { registerChaosProvider, disposeChaosProvider } from './chaos-provider';
 
-/**
- * Below is the "typical" extension.ts file that is used to activate and deactrivate the extension.
- * this file as well as package.json are the two main files that are required to develop a Podman Desktop extension.
- */
+let chaosEngine: ChaosEngine | undefined;
+let statusBarUpdateInterval: ReturnType<typeof setInterval> | undefined;
 
-// Initialize the activation of the extension.
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
-  console.log('starting hello world extension');
+  console.log('Starting Chaos Lab extension');
 
-  // A web view panel is created to display the index
-  // we use the 'media' folder that contains the bread-and-butter of the webview.
-  // it is assumed that index.html is the main file that is being displayed and all other files have already been generated.
-  //
-  // The 'index.html' and all other files are built with the `yarn build` command within packages/frontend which can also be ran with the
-  // `yarn build` command in the main directory, which will also build the backend and shared packages.
-  const panel = extensionApi.window.createWebviewPanel('helloWorld', 'Hello World', {
+  const settingsManager = new SettingsManager();
+  settingsManager.load();
+  extensionContext.subscriptions.push({ dispose: () => settingsManager.dispose() });
+
+  const settings = settingsManager.getSettings();
+
+  const containerService = new ContainerService();
+
+  chaosEngine = new ChaosEngine(containerService);
+  chaosEngine.setSafePatterns(settings.chaosSafeContainers);
+  extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
+
+  const chaosApiImpl = new ChaosApiImpl(chaosEngine, containerService);
+
+  const panel = extensionApi.window.createWebviewPanel('chaos-lab', 'Chaos Lab', {
     localResourceRoots: [extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media')],
   });
   extensionContext.subscriptions.push(panel);
 
-  // Set the index.html file for the webview.
   const indexHtmlUri = extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', 'index.html');
   const indexHtmlPath = indexHtmlUri.fsPath;
   let indexHtml = await fs.promises.readFile(indexHtmlPath, 'utf8');
 
-  // TEMPORARY. This is a workaround to replace the src of the script tag in the index.html file so that links work correctly.
-  // In the content <script type="module" crossorigin src="./index-RKnfBG18.js"></script> replaces src with webview.asWebviewUri
   const scriptLink = indexHtml.match(/<script.*?src="(.*?)".*?>/g);
   if (scriptLink) {
     scriptLink.forEach(link => {
       const src = link.match(/src="(.*?)"/);
       if (src) {
-        const webviewSrc = panel.webview.asWebviewUri(
+        const webviewUri = panel.webview.asWebviewUri(
           extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', src[1]),
         );
-        indexHtml = indexHtml.replace(src[1], webviewSrc.toString());
+        indexHtml = indexHtml.replace(src[1], webviewUri.toString());
       }
     });
   }
 
-  // TEMPORARY. We do the same for the css link
   const cssLink = indexHtml.match(/<link.*?href="(.*?)".*?>/g);
   if (cssLink) {
     cssLink.forEach(link => {
       const href = link.match(/href="(.*?)"/);
       if (href) {
-        const webviewHref = panel.webview.asWebviewUri(
+        const webviewUri = panel.webview.asWebviewUri(
           extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', href[1]),
         );
-        indexHtml = indexHtml.replace(href[1], webviewHref.toString());
+        indexHtml = indexHtml.replace(href[1], webviewUri.toString());
       }
     });
   }
 
-  // Update the webview panel with the new index.html file with corrected links.
   panel.webview.html = indexHtml;
 
-  // We now register the 'api' for the webview to communicate to the backend
   const rpcExtension = new RpcExtension(panel.webview);
-  const HelloWorldApi = new helloWorldApi(extensionContext);
-  rpcExtension.registerInstance<helloWorldApi>(helloWorldApi, HelloWorldApi);
+  rpcExtension.registerInstance<ChaosApiImpl>(ChaosApiImpl, chaosApiImpl);
+
+  settingsManager.onSettingsChanged(newSettings => {
+    chaosEngine?.setSafePatterns(newSettings.chaosSafeContainers);
+
+    if (chaosStatusBar) {
+      if (newSettings.showStatusBarChaos) {
+        chaosStatusBar.show();
+      } else {
+        chaosStatusBar.hide();
+      }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // #2: Create a status bar item
+  // Create a status bar item that displays "Chaos Lab" as its text.
+  // Set its .command to 'chaos-lab.openChaos' so clicking it opens the dashboard.
+  // Call .show() to make it visible (respecting settings.showStatusBarChaos).
+  // The 'chaos-lab.showStatusBarChaos' boolean is declared in package.json under
+  // contributes.configuration and is already available via settings.showStatusBarChaos.
+  // Push it to extensionContext.subscriptions for proper disposal.
+  // Hint: extensionApi.window.createStatusBarItem()
+  // ---------------------------------------------------------------------------
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chaosStatusBar = undefined as any; // replace with real implementation
+
+  // ---------------------------------------------------------------------------
+  // #3: Dynamically update the status bar text
+  // Set up a setInterval (every 3 seconds) that reads chaosEngine.getState()
+  // and updates chaosStatusBar.text:
+  //   - When runningAttacks > 0 → "Chaos Lab (N active)"
+  //   - Otherwise → "Chaos Lab"
+  // Store the interval handle in statusBarUpdateInterval.
+  // Push a disposable to extensionContext.subscriptions that clears the interval.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // #4: Register the "Stop All Chaos" command
+  // Register a command 'chaos-lab.stopAll' that:
+  //   1. Calls chaosApiImpl.stopAllChaos()
+  //   2. Shows a toast: 'All chaos operations have been stopped and rolled back.'
+  // Push the returned disposable to extensionContext.subscriptions.
+  // Hint: extensionApi.commands.registerCommand(id, callback)
+  // Hint: extensionApi.window.showInformationMessage(text)
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // #5: Register the "Open Dashboard" command
+  // Register a command 'chaos-lab.openChaos' that calls panel.reveal()
+  // to bring the webview panel to the foreground.
+  // Push the returned disposable to extensionContext.subscriptions.
+  // Also add the command entry to package.json under contributes.commands:
+  //   { "command": "chaos-lab.openChaos", "title": "Chaos Lab: Open Dashboard" }
+  // Hint: extensionApi.commands.registerCommand(id, callback)
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // #6: Register the "View Container" command with webview messaging
+  // Register a command 'chaos-lab.viewContainerUsage' that receives a container
+  // object ({ id?: string; Id?: string }) as its argument.
+  // The command should:
+  //   1. Extract the container ID (container?.id ?? container?.Id)
+  //   2. Call panel.reveal() to show the webview
+  //   3. Wait for the webview to become visible (e.g. setTimeout ~200ms)
+  //   4. Post a message to the webview: { type: 'navigate', url: `/chaos/container/${containerId}` }
+  // Push the returned disposable to extensionContext.subscriptions.
+  // Hint: panel.webview.postMessage(message)
+  // Hint: await new Promise(resolve => setTimeout(resolve, 200))
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // #7: Register a tray menu
+  // Register a submenu in the system tray with:
+  //   - id: 'chaos-lab.tray'
+  //   - label: 'Chaos Lab'
+  //   - Two items: 'Open Dashboard' (id: 'chaos-lab.openChaos')
+  //               and 'Stop All Chaos' (id: 'chaos-lab.stopAll')
+  // Push the returned disposable to extensionContext.subscriptions.
+  // Hint: extensionApi.tray.registerMenuItem({ id, type: 'submenu', label, submenu: [...] })
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // #14: Register a CLI tool
+  // Use extensionApi.cli.createCliTool() to register a CLI tool with:
+  //   - name: 'chaos-cli'
+  //   - displayName: 'Chaos CLI'
+  //   - markdownDescription: 'CLI for managing chaos experiments from the terminal'
+  //   - images: { icon: './icon.png' }
+  //   - version: '0.1.0'
+  //   - path: '/usr/local/bin/chaos-cli'
+  // Push the returned disposable to extensionContext.subscriptions.
+  // Hint: extensionApi.cli.createCliTool({ name, displayName, ... })
+  // ---------------------------------------------------------------------------
+
+  registerChaosProvider(extensionContext);
+
+  console.log('Chaos Lab extension activated');
 }
 
 export async function deactivate(): Promise<void> {
-  console.log('stopping hello world extension');
+  console.log('Stopping Chaos Lab extension');
+  if (statusBarUpdateInterval) {
+    clearInterval(statusBarUpdateInterval);
+    statusBarUpdateInterval = undefined;
+  }
+  await chaosEngine?.stopAll();
+  disposeChaosProvider();
 }
