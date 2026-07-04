@@ -25,9 +25,19 @@
     "typecheck:shared": "tsc --noEmit --project packages/shared",
     "typecheck:frontend": "cd packages/frontend && pnpm check",
     "typecheck:backend": "tsc --noEmit --project packages/backend",
-    "typecheck": "pnpm run typecheck:shared && pnpm run typecheck:frontend && pnpm run typecheck:backend"
+    "typecheck": "pnpm run typecheck:shared && pnpm run typecheck:frontend && pnpm run typecheck:backend",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,svelte}": [
+      "eslint --cache --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md}": "prettier --write"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.0",
+    "@commitlint/config-conventional": "^21.2.0",
     "@typescript-eslint/eslint-plugin": "^8.1.0",
     "@typescript-eslint/parser": "^8.0.1",
     "@vitest/coverage-v8": "^4.1.0",
@@ -40,6 +50,8 @@
     "eslint-plugin-no-null": "^1.0.2",
     "eslint-plugin-redundant-undefined": "^1.0.0",
     "eslint-plugin-sonarjs": "^1.0.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "prettier": "^3.3.3",
     "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^5.55.7",
@@ -48,6 +60,5 @@
     "vite": "8.0.16",
     "vitest": "^4.1.0"
   },
-  "dependencies": {},
   "packageManager": "pnpm@10.11.0"
 }
