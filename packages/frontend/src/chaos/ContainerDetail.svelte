@@ -1,6 +1,6 @@
 <script lang="ts">
 import { DetailsPage, StatusIcon, Spinner, Tooltip } from '@podman-desktop/ui-svelte';
-import { router } from 'tinro';
+import { goto } from '$app/navigation';
 import { onMount } from 'svelte';
 import { chaosClient } from '../api/client';
 import type { ContainerHealth } from '/@shared/src/ChaosApi';
@@ -141,7 +141,7 @@ async function pollLatest(): Promise<void> {
 }
 
 function goBack(): void {
-  router.goto('/chaos');
+  goto('/chaos');
 }
 
 onMount(() => {

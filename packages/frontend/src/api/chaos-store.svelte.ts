@@ -128,11 +128,7 @@ export async function stopStress(containerId: string): Promise<void> {
   invalidate();
 }
 
-export async function corruptConfig(
-  containerId: string,
-  type: SabotageType,
-  targetFile?: string,
-): Promise<void> {
+export async function corruptConfig(containerId: string, type: SabotageType, targetFile?: string): Promise<void> {
   await chaosClient.corruptConfig(containerId, type, targetFile);
   invalidate();
 }

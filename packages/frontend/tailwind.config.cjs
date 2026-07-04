@@ -1,5 +1,4 @@
 const tailwindColors = require('tailwindcss/colors');
-const tailwindTypography = require('@tailwindcss/typography');
 
 module.exports = {
   content: [
@@ -50,13 +49,11 @@ module.exports = {
       transparent: 'transparent',
       black: '#000',
       white: '#fff',
-      // The remaining colors below are not part of our palette and are only here
-      // to maintain existing code. No new use.
       violet: {
         500: tailwindColors.violet[500],
         600: tailwindColors.violet[600],
       },
     },
   },
-  plugins: [tailwindTypography],
+  plugins: [],
 };

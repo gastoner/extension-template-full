@@ -1,18 +1,38 @@
-import sveltePreprocess from 'svelte-preprocess';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import adapter from '@sveltejs/adapter-static';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-export default {
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+  kit: {
+    adapter: adapter({
+      pages: '../backend/media',
+      assets: '../backend/media',
+      strict: false,
+    }),
+    prerender: {
+      handleUnseenRoutes: 'ignore',
+    },
+    paths: {
+      relative: false,
+    },
+    alias: {
+      '/@/*': './src/*',
+      '/@shared/*': '../shared/*',
+    },
+    output: {
+      bundleStrategy: 'inline',
+    },
+    typescript: {
+      config: tsconfig => {
+        tsconfig['include'] = [...tsconfig['include'], '../../../types/**/*.d.ts'];
+        return tsconfig;
+      },
+    },
+  },
   compilerOptions: {
-    hmr: !process.env.VITEST,
     experimental: {
       async: true,
     },
   },
-  preprocess: sveltePreprocess({
-    postcss: {
-      configFilePath: join(__dirname, 'postcss.config.cjs'),
-    },
-  }),
 };
+
+export default config;

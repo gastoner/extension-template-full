@@ -1,3 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../tailwind.config.cjs';
+
+@theme {
+  --spacing-leftnavbar: 48px;
+  --spacing-leftsidebar: 170px;
+}
+
+@source "../../node_modules/@podman-desktop/ui-svelte/dist/**/*.{svelte,ts,css}";

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Button, EmptyScreen, StatusIcon, Tooltip, ErrorMessage, Expandable } from '@podman-desktop/ui-svelte';
 import { faBolt, faSkull } from '@fortawesome/free-solid-svg-icons';
-import { router } from 'tinro';
+import { goto } from '$app/navigation';
 import * as chaos from '../api/chaos-store.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
 import type { ChaosState, ContainerHealth } from '/@shared/src/ChaosApi';
@@ -197,8 +197,8 @@ function formatBytes(mb: number): string {
                     class="rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors border-2 border-[var(--pd-status-degraded)] cursor-pointer hover:brightness-110"
                     role="button"
                     tabindex="0"
-                    onclick={() => router.goto(`/chaos/container/${container.id}`)}
-                    onkeydown={e => e.key === 'Enter' && router.goto(`/chaos/container/${container.id}`)}>
+                    onclick={() => goto(`/chaos/container/${container.id}`)}
+                    onkeydown={e => e.key === 'Enter' && goto(`/chaos/container/${container.id}`)}>
                     <div class="flex items-center justify-between mb-3">
                       <div class="flex items-center gap-2">
                         <StatusIcon status={containerStatus(container)} />

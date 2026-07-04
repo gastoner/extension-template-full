@@ -1,16 +1,27 @@
 import type { ChaosApi } from '/@shared/src/ChaosApi';
 import { RpcBrowser } from '/@shared/src/messages/MessageProxy';
+import { browser } from '$app/environment';
 
 export interface RouterState {
   url: string;
 }
-const podmanDesktopApi = acquirePodmanDesktopApi();
-export const rpcBrowser: RpcBrowser = new RpcBrowser(window, podmanDesktopApi);
 
-export const chaosClient: ChaosApi = rpcBrowser.getProxy<ChaosApi>();
+let podmanDesktopApi: PodmanDesktopApi;
+let rpcBrowser: RpcBrowser;
+let chaosClient: ChaosApi;
 
-export const saveRouterState = (state: RouterState) => {
-  podmanDesktopApi.setState(state);
+if (browser) {
+  podmanDesktopApi = acquirePodmanDesktopApi();
+  rpcBrowser = new RpcBrowser(window, podmanDesktopApi);
+  chaosClient = rpcBrowser.getProxy<ChaosApi>();
+}
+
+export { rpcBrowser, chaosClient };
+
+export const saveRouterState = (state: RouterState): void => {
+  if (browser) {
+    podmanDesktopApi.setState(state);
+  }
 };
 
 const isRouterState = (value: unknown): value is RouterState => {
@@ -18,6 +29,7 @@ const isRouterState = (value: unknown): value is RouterState => {
 };
 
 export const getRouterState = (): RouterState => {
+  if (!browser) return { url: '/chaos' };
   const state = podmanDesktopApi.getState();
   if (isRouterState(state)) return state;
   return { url: '/chaos' };
