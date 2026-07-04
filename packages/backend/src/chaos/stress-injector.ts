@@ -19,19 +19,23 @@
 import * as extensionApi from '@podman-desktop/api';
 import type { StressInjection, StressType } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import type { AffectedRegistry } from './affected-registry';
 
 const STRESS_MARKER = 'CHAOS_LAB_STRESS';
 
 export class StressInjector {
   private activeStress: Map<string, StressInjection> = new Map();
   private safePatterns: RegExp[] = [];
+  private registry: AffectedRegistry | undefined;
 
   constructor(private readonly containerService: ContainerService) {}
 
+  setRegistry(registry: AffectedRegistry): void {
+    this.registry = registry;
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -57,6 +61,8 @@ export class StressInjector {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
 
+    await this.registry?.markAffected(containerId, `stress-${type}`);
+
     if (this.activeStress.has(containerId)) {
       await this.stop(containerId);
     }
@@ -75,6 +81,13 @@ export class StressInjector {
         await this.execDetached(containerId, cmd);
         break;
       }
+      case 'memory-oom': {
+        const memLimit = await this.getContainerMemoryLimit(containerId);
+        const chunkMb = memLimit > 0 ? Math.max(10, Math.floor(memLimit / (1024 * 1024 * 10))) : 50;
+        const oomCmd = `${STRESS_MARKER}=1 sh -c 'i=0; while true; do dd if=/dev/urandom bs=${chunkMb}M count=1 2>/dev/null >> /tmp/.chaos_oom_$i; i=$((i+1)); done'`;
+        await this.execDetached(containerId, oomCmd);
+        break;
+      }
       case 'log-flood': {
         const cmd = `${STRESS_MARKER}=1 sh -c 'while true; do echo "ERROR: chaos-lab stress $(date +%s)"; done'`;
         await this.execDetached(containerId, cmd);
@@ -83,7 +96,12 @@ export class StressInjector {
     }
 
     this.activeStress.set(containerId, {
-      containerId, containerName, type, workers, targetMb, startedAt: Date.now(),
+      containerId,
+      containerName,
+      type,
+      workers,
+      targetMb,
+      startedAt: Date.now(),
     });
 
     console.log(`Stress injection (${type}) started on ${containerName}`);
@@ -95,15 +113,20 @@ export class StressInjector {
 
     try {
       await extensionApi.process.exec('podman', [
-        'exec', containerId, 'sh', '-c',
+        'exec',
+        containerId,
+        'sh',
+        '-c',
         `ps aux 2>/dev/null | grep '${STRESS_MARKER}' | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null; ` +
-        `pgrep -f '${STRESS_MARKER}' 2>/dev/null | xargs -r kill -9 2>/dev/null; true`,
+          `pgrep -f '${STRESS_MARKER}' 2>/dev/null | xargs -r kill -9 2>/dev/null; true`,
       ]);
     } catch {
       // container may have stopped
     }
 
+    const stressType = entry.type;
     this.activeStress.delete(containerId);
+    this.registry?.removeAttack(containerId, `stress-${stressType}`);
     console.log(`Stress injection stopped on ${containerId}`);
   }
 
@@ -118,11 +141,20 @@ export class StressInjector {
     this.activeStress.clear();
   }
 
+  private async getContainerMemoryLimit(containerId: string): Promise<number> {
+    try {
+      const inspect = await this.containerService.inspectContainer(containerId);
+      const hostConfig = (inspect as Record<string, unknown>).HostConfig as Record<string, unknown> | undefined;
+      const memory = Number(hostConfig?.Memory ?? 0);
+      return memory > 0 ? memory : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   private async execDetached(containerId: string, cmd: string): Promise<void> {
     try {
-      await extensionApi.process.exec('podman', [
-        'exec', '-d', containerId, 'sh', '-c', cmd,
-      ]);
+      await extensionApi.process.exec('podman', ['exec', '-d', containerId, 'sh', '-c', cmd]);
     } catch (err) {
       console.warn(`Failed to exec detached in ${containerId}:`, err);
     }

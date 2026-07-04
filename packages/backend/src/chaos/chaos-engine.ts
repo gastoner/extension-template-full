@@ -24,6 +24,7 @@ import { ResourceLimiter } from './resource-limiter';
 import { ContainerIsolator } from './container-isolator';
 import { StressInjector } from './stress-injector';
 import { ConfigSaboteur } from './config-saboteur';
+import { AffectedRegistry } from './affected-registry';
 
 export class ChaosEngine {
   readonly scheduler: ScenarioScheduler;
@@ -32,6 +33,7 @@ export class ChaosEngine {
   readonly isolator: ContainerIsolator;
   readonly stressInjector: StressInjector;
   readonly configSaboteur: ConfigSaboteur;
+  readonly affectedRegistry: AffectedRegistry;
 
   private _killCount = 0;
   private _chaosModeActive = false;
@@ -39,12 +41,21 @@ export class ChaosEngine {
   private safePatterns: string[] = [];
 
   constructor(private readonly containerService: ContainerService) {
+    this.affectedRegistry = new AffectedRegistry(containerService);
     this.networkShaper = new NetworkShaper(containerService);
     this.resourceLimiter = new ResourceLimiter(containerService);
     this.isolator = new ContainerIsolator(containerService);
     this.stressInjector = new StressInjector(containerService);
     this.configSaboteur = new ConfigSaboteur(containerService);
     this.scheduler = new ScenarioScheduler(containerService, this.networkShaper, this.resourceLimiter, this);
+
+    this.networkShaper.setRegistry(this.affectedRegistry);
+    this.resourceLimiter.setRegistry(this.affectedRegistry);
+    this.isolator.setRegistry(this.affectedRegistry);
+    this.stressInjector.setRegistry(this.affectedRegistry);
+    this.configSaboteur.setRegistry(this.affectedRegistry);
+    this.scheduler.setStressInjector(this.stressInjector);
+    this.scheduler.setConfigSaboteur(this.configSaboteur);
   }
 
   get killCount(): number {
@@ -73,25 +84,23 @@ export class ChaosEngine {
     this.disableChaosMode();
     this._chaosModeActive = true;
 
-    const safeRegexes = this.safePatterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    const safeRegexes = this.safePatterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
 
-    this.chaosModeInterval = setInterval(async () => {
-      try {
-        const containers = await this.containerService.listContainers();
-        const running = containers.filter(
-          c => c.state === 'running' && !safeRegexes.some(r => r.test(c.name)),
-        );
-        if (running.length === 0) return;
+    this.chaosModeInterval = setInterval(() => {
+      void (async () => {
+        try {
+          const containers = await this.containerService.listContainers();
+          const running = containers.filter(c => c.state === 'running' && !safeRegexes.some(r => r.test(c.name)));
+          if (running.length === 0) return;
 
-        const victim = running[Math.floor(Math.random() * running.length)];
-        await this.containerService.killContainer(victim.id);
-        this._killCount++;
-        console.log(`Chaos Mode: killed container ${victim.name}`);
-      } catch (err) {
-        console.warn('Chaos Mode kill failed:', err);
-      }
+          const victim = running[Math.floor(Math.random() * running.length)];
+          await this.containerService.killContainer(victim.id);
+          this._killCount++;
+          console.log(`Chaos Mode: killed container ${victim.name}`);
+        } catch (err) {
+          console.warn('Chaos Mode kill failed:', err);
+        }
+      })();
     }, intervalSec * 1000);
   }
 

@@ -15,24 +15,29 @@ let workers = $state(1);
 let targetMb = $state(64);
 let errorMessage = $state('');
 
+let runningContainers = $derived(containers.filter(c => c.state === 'running'));
 let containerOptions = $derived(
-  [{ value: '', label: 'Select container...' }].concat(
-    containers
-      .filter(c => c.state === 'running')
-      .map(c => ({ value: c.id, label: c.name })),
-  ),
+  runningContainers.length > 0
+    ? runningContainers.map(c => ({ value: c.id, label: c.name }))
+    : [{ value: '', label: 'No running containers' }],
 );
+let noRunning = $derived(runningContainers.length === 0);
 
 const stressTypeOptions = [
   { value: 'cpu', label: 'CPU Burn' },
   { value: 'memory', label: 'Memory Pressure' },
+  { value: 'memory-oom', label: 'OOM Bomb' },
   { value: 'log-flood', label: 'Log Flood' },
 ];
 
 const stressDescriptions: Record<string, string> = {
   cpu: 'Spawns busy-loop processes inside the container that consume 100% of a CPU core each. Use workers to control how many cores to saturate.',
-  memory: 'Allocates a block of memory inside the container by reading from /dev/urandom. Use target MB to control how much memory to consume.',
-  'log-flood': 'Spawns a process that continuously writes fake error messages to stdout, flooding the container logs and potentially filling disk.',
+  memory:
+    'Allocates a block of memory inside the container by reading from /dev/urandom. Use target MB to control how much memory to consume.',
+  'memory-oom':
+    'Progressively fills all available memory until the container hits the OOM limit and gets killed by the kernel. This simulates an out-of-memory crash.',
+  'log-flood':
+    'Spawns a process that continuously writes fake error messages to stdout, flooding the container logs and potentially filling disk.',
 };
 
 async function inject(): Promise<void> {
@@ -65,13 +70,29 @@ function formatElapsed(startedAt: number): string {
   <div class="flex flex-col w-full h-full pt-4">
     <div class="flex flex-row w-full px-5 pb-2">
       <Expandable expanded={getExpanded('stress-injector')} onclick={val => setExpanded('stress-injector', val)}>
-        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">Stress Injector</div>{/snippet}
+        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">
+            Stress Injector
+          </div>{/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Inject stress processes into a running container via <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman exec -d</code>. Unlike resource limits (which cap usage), stress injection <em>generates</em> actual load to test how your application behaves under pressure.</p>
+          <p>
+            Inject stress processes into a running container via <code
+              class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman exec -d</code
+            >. Unlike resource limits (which cap usage), stress injection <em>generates</em> actual load to test how your
+            application behaves under pressure.
+          </p>
           <ul class="list-disc pl-5 space-y-1">
-            <li><strong>CPU Burn</strong> — Spawns busy-loop processes that consume 100% of a CPU core each. Use workers to control how many cores to saturate.</li>
-            <li><strong>Memory Pressure</strong> — Allocates a block of memory inside the container. Use target MB to control how much memory to consume.</li>
-            <li><strong>Log Flood</strong> — Continuously writes fake error messages to stdout, flooding container logs and potentially filling disk.</li>
+            <li>
+              <strong>CPU Burn</strong> — Spawns busy-loop processes that consume 100% of a CPU core each. Use workers to
+              control how many cores to saturate.
+            </li>
+            <li>
+              <strong>Memory Pressure</strong> — Allocates a block of memory inside the container. Use target MB to control
+              how much memory to consume.
+            </li>
+            <li>
+              <strong>Log Flood</strong> — Continuously writes fake error messages to stdout, flooding container logs and
+              potentially filling disk.
+            </li>
           </ul>
         </div>
       </Expandable>
@@ -87,7 +108,11 @@ function formatElapsed(startedAt: number): string {
 
             <div>
               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
-              <Dropdown bind:value={selectedContainer} options={containerOptions} ariaLabel="Target container" />
+              <Dropdown
+                bind:value={selectedContainer}
+                options={containerOptions}
+                disabled={noRunning}
+                ariaLabel="Target container" />
             </div>
 
             <div>
@@ -120,13 +145,15 @@ function formatElapsed(startedAt: number): string {
                 <h2 class="text-xl pt-2 grow mb-3">Active Injections</h2>
                 <div class="space-y-2">
                   {#each activeInjections as injection}
-                    <div class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                    <div
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
                       <div class="flex items-center gap-4 text-sm">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {injection.containerName}
                         </span>
                         <Tooltip tip="Stress type" bottom>
-                          <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+                          <span
+                            class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
                             {injection.type}
                           </span>
                         </Tooltip>

@@ -21,6 +21,18 @@
       {
         "command": "chaos-lab.toggleChaosMode",
         "title": "Chaos Lab: Toggle Chaos Mode"
+      },
+      {
+        "command": "chaos-lab.runScenario",
+        "title": "Chaos Lab: Run Scenario"
+      },
+      {
+        "command": "chaos-lab.revertAll",
+        "title": "Chaos Lab: Revert All Containers"
+      },
+      {
+        "command": "chaos-lab.revertContainer",
+        "title": "Chaos Lab: Revert Container"
       }
     ],
     "menus": {},

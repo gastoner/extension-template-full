@@ -16,10 +16,14 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { AttackType, Scenario, ScenarioStep } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { NetworkShaper } from './network-shaper';
 import type { ResourceLimiter } from './resource-limiter';
+import type { StressInjector } from './stress-injector';
+import type { ConfigSaboteur } from './config-saboteur';
 import type { ChaosEngine } from './chaos-engine';
 
 interface AffectedContainer {
@@ -36,6 +40,11 @@ interface ScheduledScenario {
 export class ScenarioScheduler {
   private scheduled: Map<string, ScheduledScenario> = new Map();
   private safePatterns: RegExp[] = [];
+  private storagePath: string | undefined;
+  private readonly fileName = 'scenarios.json';
+
+  private stressInjector: StressInjector | undefined;
+  private configSaboteur: ConfigSaboteur | undefined;
 
   constructor(
     private readonly containerService: ContainerService,
@@ -44,10 +53,47 @@ export class ScenarioScheduler {
     private readonly engine: ChaosEngine,
   ) {}
 
+  setStressInjector(injector: StressInjector): void {
+    this.stressInjector = injector;
+  }
+
+  setConfigSaboteur(saboteur: ConfigSaboteur): void {
+    this.configSaboteur = saboteur;
+  }
+
+  setStoragePath(storagePath: string): void {
+    this.storagePath = storagePath;
+  }
+
+  async save(): Promise<void> {
+    if (!this.storagePath) return;
+    try {
+      await fs.promises.mkdir(this.storagePath, { recursive: true });
+      const filePath = path.join(this.storagePath, this.fileName);
+      const scenarios = this.listScenarios();
+      await fs.promises.writeFile(filePath, JSON.stringify(scenarios, undefined, 2), 'utf8');
+    } catch (err) {
+      console.warn('Failed to save scenarios:', err);
+    }
+  }
+
+  async load(): Promise<void> {
+    if (!this.storagePath) return;
+    const filePath = path.join(this.storagePath, this.fileName);
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const scenarios: Scenario[] = JSON.parse(raw);
+      for (const scenario of scenarios) {
+        scenario.enabled = false;
+        this.addScenario(scenario);
+      }
+    } catch {
+      // file doesn't exist or is malformed — start fresh
+    }
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -66,7 +112,7 @@ export class ScenarioScheduler {
 
     if (scenario.enabled) {
       entry.intervalHandle = setInterval(() => {
-        this.executeAttack(entry).catch(err =>
+        this.executeAttack(entry).catch((err: unknown) =>
           console.error(`Scenario ${scenario.name} attack failed:`, err),
         );
       }, scenario.intervalSec * 1000);
@@ -96,11 +142,19 @@ export class ScenarioScheduler {
 
     if (enabled) {
       entry.intervalHandle = setInterval(() => {
-        this.executeAttack(entry).catch(err =>
+        this.executeAttack(entry).catch((err: unknown) =>
           console.error(`Scenario ${entry.scenario.name} attack failed:`, err),
         );
       }, entry.scenario.intervalSec * 1000);
     }
+  }
+
+  async runOnce(id: string): Promise<void> {
+    const entry = this.scheduled.get(id);
+    if (!entry) {
+      throw new Error(`Scenario '${id}' not found.`);
+    }
+    await this.executeAttack(entry);
   }
 
   listScenarios(): Scenario[] {
@@ -116,7 +170,7 @@ export class ScenarioScheduler {
       entry.scenario.enabled = false;
 
       for (const [key, info] of entry.affectedContainers) {
-        const containerId = key.replace(/-(network|resources|disconnect)$/, '');
+        const containerId = key.replace(/-(network|resources|disconnect|stress|config)$/, '');
         try {
           switch (info.attackType) {
             case 'pause':
@@ -134,6 +188,16 @@ export class ScenarioScheduler {
               await this.resourceLimiter.removeLimit(containerId);
               break;
             case 'network-disconnect':
+              break;
+            case 'stress':
+              if (this.stressInjector) {
+                await this.stressInjector.stop(containerId);
+              }
+              break;
+            case 'config-sabotage':
+              if (this.configSaboteur) {
+                await this.configSaboteur.restore(containerId);
+              }
               break;
           }
         } catch (err: unknown) {
@@ -230,7 +294,10 @@ export class ScenarioScheduler {
           packetLossPercent: step.packetLossPercent,
           bandwidthKbps: step.bandwidthKbps,
         });
-        entry.affectedContainers.set(`${target.id}-network`, { attackType: 'network-shape', engineId: target.engineId });
+        entry.affectedContainers.set(`${target.id}-network`, {
+          attackType: 'network-shape',
+          engineId: target.engineId,
+        });
         break;
       case 'resource-limit':
         await this.resourceLimiter.applyLimit({
@@ -238,7 +305,10 @@ export class ScenarioScheduler {
           cpuPercent: step.cpuPercent ?? 50,
           memoryMb: step.memoryMb ?? 64,
         });
-        entry.affectedContainers.set(`${target.id}-resources`, { attackType: 'resource-limit', engineId: target.engineId });
+        entry.affectedContainers.set(`${target.id}-resources`, {
+          attackType: 'resource-limit',
+          engineId: target.engineId,
+        });
         break;
       case 'network-disconnect':
         if (step.disconnectNetworks) {
@@ -246,7 +316,28 @@ export class ScenarioScheduler {
             await this.containerService.disconnectFromNetwork(target.id, network);
           }
         }
-        entry.affectedContainers.set(`${target.id}-disconnect`, { attackType: 'network-disconnect', engineId: target.engineId });
+        entry.affectedContainers.set(`${target.id}-disconnect`, {
+          attackType: 'network-disconnect',
+          engineId: target.engineId,
+        });
+        break;
+      case 'stress':
+        if (this.stressInjector) {
+          await this.stressInjector.inject(target.id, 'cpu', step.cpuPercent ? Math.ceil(step.cpuPercent / 25) : 1);
+        }
+        entry.affectedContainers.set(`${target.id}-stress`, {
+          attackType: 'stress',
+          engineId: target.engineId,
+        });
+        break;
+      case 'config-sabotage':
+        if (this.configSaboteur) {
+          await this.configSaboteur.corrupt(target.id, 'dns-blackhole');
+        }
+        entry.affectedContainers.set(`${target.id}-config`, {
+          attackType: 'config-sabotage',
+          engineId: target.engineId,
+        });
         break;
     }
   }

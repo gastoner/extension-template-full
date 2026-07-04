@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Button, Dropdown, Tooltip, Input, Checkbox, ErrorMessage, Expandable } from '@podman-desktop/ui-svelte';
-import { faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faPlay } from '@fortawesome/free-solid-svg-icons';
 import * as chaos from '../api/chaos-store.svelte';
 import SliderNumberInput from '../lib/SliderNumberInput.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
@@ -58,6 +58,8 @@ const attackOptions: { value: string; label: string }[] = [
   { value: 'network-shape', label: 'Network Shaping' },
   { value: 'resource-limit', label: 'Resource Limit' },
   { value: 'network-disconnect', label: 'Network Disconnect' },
+  { value: 'stress', label: 'Stress (CPU)' },
+  { value: 'config-sabotage', label: 'Config Sabotage (DNS)' },
 ];
 
 let runningContainers = $derived(containers.filter(c => c.state === 'running'));
@@ -172,6 +174,15 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
     errorMessage = `Failed to toggle scenario: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
+
+async function runOnce(id: string): Promise<void> {
+  try {
+    errorMessage = '';
+    await chaos.runScenarioOnce(id);
+  } catch (err) {
+    errorMessage = `Failed to run scenario: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
 </script>
 
 <div class="flex flex-col w-full h-full">
@@ -182,14 +193,22 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
           <div class="flex flex-row w-full items-center">
             <div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">Chaos Scenarios</div>
             <div class="flex grow justify-end">
-              <Button type={showForm ? 'secondary' : 'primary'} onclick={() => { showForm = !showForm; }} icon={showForm ? undefined : faPlus}>
+              <Button
+                type={showForm ? 'secondary' : 'primary'}
+                onclick={() => {
+                  showForm = !showForm;
+                }}
+                icon={showForm ? undefined : faPlus}>
                 {showForm ? 'Cancel' : 'New Scenario'}
               </Button>
             </div>
           </div>
         {/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Create repeating chaos attack sequences that run on an interval. Each scenario can target random, specific, or all running containers.</p>
+          <p>
+            Create repeating chaos attack sequences that run on an interval. Each scenario can target random, specific,
+            or all running containers.
+          </p>
           <ul class="list-disc pl-5 space-y-1">
             <li><strong>Stop / Kill</strong> — Gracefully stops or force-kills the container process.</li>
             <li><strong>Pause</strong> — Freezes all processes without stopping the container.</li>
@@ -198,7 +217,10 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
             <li><strong>Resource Limit</strong> — Caps CPU and memory usage.</li>
             <li><strong>Network Disconnect</strong> — Disconnects the container from its networks.</li>
           </ul>
-          <p>Scenarios can have multiple steps with optional delays between them, and each step can override the scenario's target strategy.</p>
+          <p>
+            Scenarios can have multiple steps with optional delays between them, and each step can override the
+            scenario's target strategy.
+          </p>
         </div>
       </Expandable>
     </div>
@@ -221,7 +243,12 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                 <div class="grid grid-cols-2 gap-4">
                   <div>
                     <span class="block text-xs text-[var(--pd-content-text)] mb-1">Interval (sec)</span>
-                    <SliderNumberInput bind:value={newInterval} minimum={5} maximum={3600} step={5} label="Interval seconds" />
+                    <SliderNumberInput
+                      bind:value={newInterval}
+                      minimum={5}
+                      maximum={3600}
+                      step={5}
+                      label="Interval seconds" />
                   </div>
                   <div>
                     <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Strategy</span>
@@ -236,8 +263,12 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                     {:else}
                       <div class="space-y-1 max-h-40 overflow-auto">
                         {#each runningContainers as c}
-                          <Checkbox checked={selectedTargetIds.includes(c.id)} onclick={() => toggleTarget(c.id)} title={c.name}>
-                            {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{c.name}</span>{/snippet}
+                          <Checkbox
+                            checked={selectedTargetIds.includes(c.id)}
+                            onclick={() => toggleTarget(c.id)}
+                            title={c.name}>
+                            {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{c.name}</span
+                              >{/snippet}
                           </Checkbox>
                         {/each}
                       </div>
@@ -256,7 +287,11 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                         <div class="flex items-center justify-between">
                           <span class="text-xs font-medium text-[var(--pd-content-header)]">Step {i + 1}</span>
                           {#if steps.length > 1}
-                            <Button type="danger" onclick={removeStep.bind(undefined, i)} icon={faTrash} title="Remove step" />
+                            <Button
+                              type="danger"
+                              onclick={removeStep.bind(undefined, i)}
+                              icon={faTrash}
+                              title="Remove step" />
                           {/if}
                         </div>
                         <div class="grid grid-cols-2 gap-3">
@@ -265,23 +300,38 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                             <Dropdown bind:value={step.attackType} options={attackOptions} ariaLabel="Attack type" />
                           </div>
                           <div>
-                            <span class="block text-xs text-[var(--pd-content-text)] mb-1">Delay before step (sec)</span>
-                            <SliderNumberInput bind:value={step.delaySec} minimum={0} maximum={3600} step={1} label="Delay seconds" />
+                            <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                              >Delay before step (sec)</span>
+                            <SliderNumberInput
+                              bind:value={step.delaySec}
+                              minimum={0}
+                              maximum={3600}
+                              step={1}
+                              label="Delay seconds" />
                           </div>
                         </div>
 
                         <Checkbox bind:checked={step.overrideTargets} title="Override scenario targets for this step">
-                          {#snippet children()}<span class="text-xs text-[var(--pd-content-text)]">Target specific containers (override scenario targets)</span>{/snippet}
+                          {#snippet children()}<span class="text-xs text-[var(--pd-content-text)]"
+                              >Target specific containers (override scenario targets)</span
+                            >{/snippet}
                         </Checkbox>
                         {#if step.overrideTargets}
                           <div class="pl-4 border-l-2 border-[var(--pd-input-field-stroke)]">
                             {#if runningContainers.length === 0}
-                              <p class="text-xs text-[var(--pd-content-text)] opacity-50">No running containers available.</p>
+                              <p class="text-xs text-[var(--pd-content-text)] opacity-50">
+                                No running containers available.
+                              </p>
                             {:else}
                               <div class="space-y-1 max-h-32 overflow-auto">
                                 {#each runningContainers as c}
-                                  <Checkbox checked={step.targetContainerIds.includes(c.id)} onclick={() => toggleStepTarget(step, c.id)} title={c.name}>
-                                    {#snippet children()}<span class="text-xs text-[var(--pd-content-text)]">{c.name}</span>{/snippet}
+                                  <Checkbox
+                                    checked={step.targetContainerIds.includes(c.id)}
+                                    onclick={() => toggleStepTarget(step, c.id)}
+                                    title={c.name}>
+                                    {#snippet children()}<span class="text-xs text-[var(--pd-content-text)]"
+                                        >{c.name}</span
+                                      >{/snippet}
                                   </Checkbox>
                                 {/each}
                               </div>
@@ -293,15 +343,30 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                           <div class="grid grid-cols-3 gap-3">
                             <div>
                               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Latency (ms)</span>
-                              <SliderNumberInput bind:value={step.latencyMs} minimum={0} maximum={5000} step={50} label="Latency ms" />
+                              <SliderNumberInput
+                                bind:value={step.latencyMs}
+                                minimum={0}
+                                maximum={5000}
+                                step={50}
+                                label="Latency ms" />
                             </div>
                             <div>
                               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Packet Loss (%)</span>
-                              <SliderNumberInput bind:value={step.packetLossPercent} minimum={0} maximum={100} step={1} label="Packet loss" />
+                              <SliderNumberInput
+                                bind:value={step.packetLossPercent}
+                                minimum={0}
+                                maximum={100}
+                                step={1}
+                                label="Packet loss" />
                             </div>
                             <div>
                               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Bandwidth (kbps)</span>
-                              <SliderNumberInput bind:value={step.bandwidthKbps} minimum={10} maximum={100000} step={100} label="Bandwidth" />
+                              <SliderNumberInput
+                                bind:value={step.bandwidthKbps}
+                                minimum={10}
+                                maximum={100000}
+                                step={100}
+                                label="Bandwidth" />
                             </div>
                           </div>
                         {/if}
@@ -309,12 +374,23 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                         {#if step.attackType === 'resource-limit'}
                           <div class="grid grid-cols-2 gap-3">
                             <div>
-                              <span class="block text-xs text-[var(--pd-content-text)] mb-1">CPU Cores ({(step.cpuPercent / 100).toFixed(2)} cores)</span>
-                              <SliderNumberInput bind:value={step.cpuPercent} minimum={1} maximum={1600} step={1} label="CPU percent" />
+                              <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                                >CPU Cores ({(step.cpuPercent / 100).toFixed(2)} cores)</span>
+                              <SliderNumberInput
+                                bind:value={step.cpuPercent}
+                                minimum={1}
+                                maximum={1600}
+                                step={1}
+                                label="CPU percent" />
                             </div>
                             <div>
                               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Memory (MB)</span>
-                              <SliderNumberInput bind:value={step.memoryMb} minimum={16} maximum={8192} step={16} label="Memory MB" />
+                              <SliderNumberInput
+                                bind:value={step.memoryMb}
+                                minimum={16}
+                                maximum={8192}
+                                step={16}
+                                label="Memory MB" />
                             </div>
                           </div>
                         {/if}
@@ -324,7 +400,12 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                 </div>
 
                 <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
-                  <Button type="secondary" class="w-full" onclick={() => { showForm = false; }}>Cancel</Button>
+                  <Button
+                    type="secondary"
+                    class="w-full"
+                    onclick={() => {
+                      showForm = false;
+                    }}>Cancel</Button>
                   <Button class="w-full" onclick={addScenario}>Create Scenario</Button>
                 </div>
               </div>
@@ -338,7 +419,9 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
               <div class="overflow-auto rounded-lg">
                 <div class="w-full" role="table" aria-label="scenarios">
                   <div role="rowgroup">
-                    <div class="grid grid-cols-6 gap-x-2 h-8 text-[var(--pd-table-header-text)] uppercase text-xs font-semibold items-center px-3" role="row">
+                    <div
+                      class="grid grid-cols-6 gap-x-2 h-8 text-[var(--pd-table-header-text)] uppercase text-xs font-semibold items-center px-3"
+                      role="row">
                       <div role="columnheader">Name</div>
                       <div role="columnheader">Interval</div>
                       <div role="columnheader">Strategy</div>
@@ -349,15 +432,22 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                   </div>
                   <div role="rowgroup" class="space-y-2">
                     {#each scenarios as scenario}
-                      <div class="grid grid-cols-6 gap-x-2 min-h-[48px] items-center px-3 rounded-lg bg-[var(--pd-content-card-hover-bg)] transition-colors" role="row" aria-label={scenario.name}>
-                        <div class="text-[var(--pd-content-header)] font-medium text-sm" role="cell">{scenario.name}</div>
+                      <div
+                        class="grid grid-cols-6 gap-x-2 min-h-[48px] items-center px-3 rounded-lg bg-[var(--pd-content-card-hover-bg)] transition-colors"
+                        role="row"
+                        aria-label={scenario.name}>
+                        <div class="text-[var(--pd-content-header)] font-medium text-sm" role="cell">
+                          {scenario.name}
+                        </div>
                         <div class="text-[var(--pd-content-text)] text-sm" role="cell">{scenario.intervalSec}s</div>
                         <div class="text-[var(--pd-content-text)] text-sm" role="cell">{scenario.targetStrategy}</div>
                         <div class="text-[var(--pd-content-text)] text-sm flex flex-wrap gap-1" role="cell">
                           {#each scenario.steps as step, i}
                             <Tooltip tip={stepSummary(step)} bottom>
-                              <span class="px-1.5 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-button-secondary-bg)]">
-                                {i + 1}. {attackOptions.find(o => o.value === step.attackType)?.label ?? step.attackType}
+                              <span
+                                class="px-1.5 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-button-secondary-bg)]">
+                                {i + 1}. {attackOptions.find(o => o.value === step.attackType)?.label ??
+                                  step.attackType}
                               </span>
                             </Tooltip>
                           {/each}
@@ -373,8 +463,19 @@ async function toggleScenario(id: string, enabled: boolean): Promise<void> {
                             </button>
                           </Tooltip>
                         </div>
-                        <div class="text-right" role="cell">
-                          <Button type="danger" onclick={deleteScenario.bind(undefined, scenario.id)} icon={faTrash} title="Delete scenario">
+                        <div class="text-right flex justify-end gap-2" role="cell">
+                          <Button
+                            type="secondary"
+                            onclick={runOnce.bind(undefined, scenario.id)}
+                            icon={faPlay}
+                            title="Run scenario once">
+                            Run
+                          </Button>
+                          <Button
+                            type="danger"
+                            onclick={deleteScenario.bind(undefined, scenario.id)}
+                            icon={faTrash}
+                            title="Delete scenario">
                             Delete
                           </Button>
                         </div>

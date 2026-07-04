@@ -19,22 +19,32 @@
 import * as extensionApi from '@podman-desktop/api';
 import type { IsolationRule } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import type { AffectedRegistry } from './affected-registry';
 
 export class ContainerIsolator {
   private isolations: Map<string, IsolationRule> = new Map();
   private autoRestoreTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private safePatterns: RegExp[] = [];
+  private registry: AffectedRegistry | undefined;
 
   private async execIptables(containerId: string, args: string[]): Promise<void> {
     const joinedArgs = args.join(' ');
     try {
       await extensionApi.process.exec('podman', [
-        'exec', '--privileged', containerId, 'sh', '-c',
+        'exec',
+        '--privileged',
+        containerId,
+        'sh',
+        '-c',
         `PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin" iptables ${joinedArgs}`,
       ]);
     } catch {
       await extensionApi.process.exec('podman', [
-        'exec', '--privileged', containerId, 'sh', '-c',
+        'exec',
+        '--privileged',
+        containerId,
+        'sh',
+        '-c',
         `PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin" iptables-legacy ${joinedArgs}`,
       ]);
     }
@@ -42,10 +52,12 @@ export class ContainerIsolator {
 
   constructor(private readonly containerService: ContainerService) {}
 
+  setRegistry(registry: AffectedRegistry): void {
+    this.registry = registry;
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -68,6 +80,8 @@ export class ContainerIsolator {
     if (this.isolations.has(rule.containerId)) {
       await this.restore(rule.containerId);
     }
+
+    await this.registry?.markAffected(rule.containerId, `isolation-${rule.mode}`);
 
     rule.startedAt = Date.now();
 
@@ -92,12 +106,12 @@ export class ContainerIsolator {
           throw new Error('Network partition requires at least one peer container ID.');
         }
         const hasIptables =
-          await this.containerService.checkToolAvailability(rule.containerId, 'iptables') ||
-          await this.containerService.checkToolAvailability(rule.containerId, 'iptables-legacy');
+          (await this.containerService.checkToolAvailability(rule.containerId, 'iptables')) ||
+          (await this.containerService.checkToolAvailability(rule.containerId, 'iptables-legacy'));
         if (!hasIptables) {
           throw new Error(
             `Container ${rule.containerName} does not have iptables. ` +
-            'Network partition mode requires iptables inside the container.',
+              'Network partition mode requires iptables inside the container.',
           );
         }
         for (const peerId of rule.partitionPeers) {
@@ -115,7 +129,7 @@ export class ContainerIsolator {
 
     if (rule.autoRestoreAfterSec && rule.autoRestoreAfterSec > 0) {
       const timer = setTimeout(() => {
-        this.restore(rule.containerId).catch(err =>
+        this.restore(rule.containerId).catch((err: unknown) =>
           console.warn(`Auto-restore failed for ${rule.containerName}:`, err),
         );
       }, rule.autoRestoreAfterSec * 1000);
@@ -174,6 +188,7 @@ export class ContainerIsolator {
     }
 
     this.isolations.delete(containerId);
+    this.registry?.removeAttack(containerId, `isolation-${rule.mode}`);
     console.log(`Restored ${rule.containerName} from isolation`);
   }
 
@@ -195,7 +210,10 @@ export class ContainerIsolator {
   private async getContainerIp(containerId: string): Promise<string | undefined> {
     try {
       const result = await extensionApi.process.exec('podman', [
-        'inspect', containerId, '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
+        'inspect',
+        containerId,
+        '--format',
+        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
       ]);
       const ip = result.stdout.trim();
       return ip || undefined;

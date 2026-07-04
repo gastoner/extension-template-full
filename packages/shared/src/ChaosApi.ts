@@ -67,7 +67,7 @@ export interface ResourceLimit {
   deviceWriteBpsKB?: number;
 }
 
-export type StressType = 'cpu' | 'memory' | 'log-flood';
+export type StressType = 'cpu' | 'memory' | 'memory-oom' | 'log-flood';
 
 export interface StressInjection {
   containerId: string;
@@ -117,6 +117,20 @@ export interface ContainerHealth {
   isolationMode?: string;
 }
 
+export interface AffectedContainerState {
+  containerId: string;
+  containerName: string;
+  engineId: string;
+  firstAffectedAt: number;
+  originalState: {
+    wasRunning: boolean;
+    networks: string[];
+    cpuNanos: number;
+    memoryBytes: number;
+  };
+  activeAttacks: string[];
+}
+
 export interface ChaosState {
   runningAttacks: number;
   killCount: number;
@@ -163,4 +177,10 @@ export abstract class ChaosApi {
 
   abstract enableChaosMode(intervalSec: number): Promise<void>;
   abstract disableChaosMode(): Promise<void>;
+
+  abstract runScenarioOnce(id: string): Promise<void>;
+
+  abstract getAffectedContainers(): Promise<AffectedContainerState[]>;
+  abstract revertContainer(containerId: string): Promise<void>;
+  abstract revertAllContainers(): Promise<void>;
 }

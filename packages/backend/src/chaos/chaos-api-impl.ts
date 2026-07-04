@@ -18,6 +18,7 @@
 
 import * as extensionApi from '@podman-desktop/api';
 import type {
+  AffectedContainerState,
   ChaosApi,
   ChaosState,
   ConfigSabotage,
@@ -41,16 +42,16 @@ export class ChaosApiImpl implements ChaosApi {
     private readonly containerService: ContainerService,
   ) {}
 
-  setNotificationsEnabled(enabled: boolean): void {
+  async setNotificationsEnabled(enabled: boolean): Promise<void> {
     this.notificationsEnabled = enabled;
   }
 
   private notify(message: string, warn = false): void {
     if (!this.notificationsEnabled) return;
     if (warn) {
-      extensionApi.window.showWarningMessage(message);
+      void extensionApi.window.showWarningMessage(message);
     } else {
-      extensionApi.window.showInformationMessage(message);
+      void extensionApi.window.showInformationMessage(message);
     }
   }
 
@@ -83,10 +84,18 @@ export class ChaosApiImpl implements ChaosApi {
         attacks.push({ type: `isolation-${isolation.mode}`, target: c.name, startedAt: isolation.startedAt });
       }
       if (state.stressInjections[c.id]) {
-        attacks.push({ type: `stress-${state.stressInjections[c.id].type}`, target: c.name, startedAt: state.stressInjections[c.id].startedAt });
+        attacks.push({
+          type: `stress-${state.stressInjections[c.id].type}`,
+          target: c.name,
+          startedAt: state.stressInjections[c.id].startedAt,
+        });
       }
       if (state.configSabotages[c.id]) {
-        attacks.push({ type: `config-${state.configSabotages[c.id].type}`, target: c.name, startedAt: state.configSabotages[c.id].startedAt });
+        attacks.push({
+          type: `config-${state.configSabotages[c.id].type}`,
+          target: c.name,
+          startedAt: state.configSabotages[c.id].startedAt,
+        });
       }
 
       return {
@@ -121,11 +130,13 @@ export class ChaosApiImpl implements ChaosApi {
       scenario.id = crypto.randomUUID();
     }
     this.engine.scheduler.addScenario(scenario);
+    await this.engine.scheduler.save();
     this.notify(`Scenario '${scenario.name}' created`);
   }
 
   async deleteScenario(id: string): Promise<void> {
     this.engine.scheduler.removeScenario(id);
+    await this.engine.scheduler.save();
   }
 
   async listScenarios(): Promise<Scenario[]> {
@@ -134,6 +145,12 @@ export class ChaosApiImpl implements ChaosApi {
 
   async toggleScenario(id: string, enabled: boolean): Promise<void> {
     this.engine.scheduler.toggleScenario(id, enabled);
+    await this.engine.scheduler.save();
+  }
+
+  async runScenarioOnce(id: string): Promise<void> {
+    await this.engine.scheduler.runOnce(id);
+    this.notify('Scenario executed', true);
   }
 
   async applyNetworkRule(rule: NetworkRule): Promise<void> {
@@ -191,16 +208,12 @@ export class ChaosApiImpl implements ChaosApi {
 
     const pm = await this.detectPackageManager(containerId);
     if (!pm) {
-      throw new Error(
-        `Could not detect a package manager (apt-get, dnf, yum, apk, microdnf) in the container.`,
-      );
+      throw new Error(`Could not detect a package manager (apt-get, dnf, yum, apk, microdnf) in the container.`);
     }
 
     const pkg = this.resolvePackageName(tool, pm);
     const installCmd = this.buildInstallCommand(pm, pkg);
-    await extensionApi.process.exec('podman', [
-      'exec', containerId, 'sh', '-c', installCmd,
-    ]);
+    await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', installCmd]);
   }
 
   async injectStress(containerId: string, type: StressType, workers?: number, targetMb?: number): Promise<void> {
@@ -231,6 +244,65 @@ export class ChaosApiImpl implements ChaosApi {
     return this.engine.configSaboteur.listSabotages();
   }
 
+  async getAffectedContainers(): Promise<AffectedContainerState[]> {
+    return this.engine.affectedRegistry.getAffected();
+  }
+
+  async revertContainer(containerId: string): Promise<void> {
+    await this.engine.stopAll();
+    const entry = this.engine.affectedRegistry.getEntry(containerId);
+    if (!entry) return;
+
+    if (entry.originalState.wasRunning) {
+      try {
+        await this.containerService.startContainer(entry.engineId, containerId);
+      } catch {
+        // may already be running
+      }
+    }
+
+    if (entry.originalState.cpuNanos > 0 || entry.originalState.memoryBytes > 0) {
+      try {
+        const args = ['update', containerId];
+        if (entry.originalState.cpuNanos > 0) {
+          args.push('--cpus', (entry.originalState.cpuNanos / 1e9).toFixed(2));
+        } else {
+          args.push('--cpus', '0');
+        }
+        if (entry.originalState.memoryBytes > 0) {
+          const memMb = Math.ceil(entry.originalState.memoryBytes / (1024 * 1024));
+          args.push('--memory', `${memMb}m`);
+        } else {
+          args.push('--memory', '0');
+        }
+        await extensionApi.process.exec('podman', args);
+      } catch {
+        // restore may fail if container is not running
+      }
+    }
+
+    for (const network of entry.originalState.networks) {
+      try {
+        await this.containerService.connectToNetwork(containerId, network);
+      } catch {
+        // may already be connected
+      }
+    }
+
+    this.engine.affectedRegistry.clearContainer(containerId);
+    this.notify(`Container ${entry.containerName} reverted to default state`);
+  }
+
+  async revertAllContainers(): Promise<void> {
+    const affected = this.engine.affectedRegistry.getAffected();
+    await this.engine.stopAll();
+    for (const entry of affected) {
+      await this.revertContainer(entry.containerId);
+    }
+    this.engine.affectedRegistry.clear();
+    this.notify('All affected containers reverted to default state');
+  }
+
   async enableChaosMode(intervalSec: number): Promise<void> {
     await this.engine.enableChaosMode(intervalSec);
     this.notify(`CHAOS MODE enabled — killing a random container every ${intervalSec}s`, true);
@@ -244,9 +316,7 @@ export class ChaosApiImpl implements ChaosApi {
   private async detectPackageManager(containerId: string): Promise<string | undefined> {
     for (const pm of ['apt-get', 'dnf', 'microdnf', 'yum', 'apk']) {
       try {
-        await extensionApi.process.exec('podman', [
-          'exec', containerId, 'sh', '-c', `command -v ${pm}`,
-        ]);
+        await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', `command -v ${pm}`]);
         return pm;
       } catch {
         // not found, try next
@@ -256,8 +326,7 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   private resolvePackageName(tool: string, pm: string): string {
-    const pmFamily = (pm === 'dnf' || pm === 'microdnf' || pm === 'yum') ? 'rpm' :
-                     (pm === 'apk') ? 'apk' : 'deb';
+    const pmFamily = pm === 'dnf' || pm === 'microdnf' || pm === 'yum' ? 'rpm' : pm === 'apk' ? 'apk' : 'deb';
     return TOOL_PACKAGES[tool]?.[pmFamily] ?? TOOL_PACKAGES[tool]?.deb ?? tool;
   }
 
@@ -279,6 +348,6 @@ export class ChaosApiImpl implements ChaosApi {
 }
 
 const TOOL_PACKAGES: Record<string, Record<string, string>> = {
-  tc:       { deb: 'iproute2', rpm: 'iproute-tc', apk: 'iproute2' },
-  iptables: { deb: 'iptables', rpm: 'iptables',   apk: 'iptables' },
+  tc: { deb: 'iproute2', rpm: 'iproute-tc', apk: 'iproute2' },
+  iptables: { deb: 'iptables', rpm: 'iptables', apk: 'iptables' },
 };

@@ -17,13 +17,13 @@ let deviceReadBpsKB = $state(0);
 let deviceWriteBpsKB = $state(0);
 let errorMessage = $state('');
 
+let runningContainers = $derived(containers.filter(c => c.state === 'running'));
 let containerOptions = $derived(
-  [{ value: '', label: 'Select container...' }].concat(
-    containers
-      .filter(c => c.state === 'running')
-      .map(c => ({ value: c.id, label: c.name })),
-  ),
+  runningContainers.length > 0
+    ? runningContainers.map(c => ({ value: c.id, label: c.name }))
+    : [{ value: '', label: 'No running containers' }],
 );
+let noRunning = $derived(runningContainers.length === 0);
 
 async function applyLimit(): Promise<void> {
   if (!selectedContainer) return;
@@ -55,11 +55,19 @@ async function removeLimit(containerId: string): Promise<void> {
   <div class="flex flex-col w-full h-full pt-4">
     <div class="flex flex-row w-full px-5 pb-2">
       <Expandable expanded={getExpanded('resource-limiter')} onclick={val => setExpanded('resource-limiter', val)}>
-        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">Resource Limiter</div>{/snippet}
+        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">
+            Resource Limiter
+          </div>{/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Restrict CPU, memory, and disk I/O for a running container using <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman update</code>. Original limits are saved and restored when you click Restore.</p>
+          <p>
+            Restrict CPU, memory, and disk I/O for a running container using <code
+              class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman update</code
+            >. Original limits are saved and restored when you click Restore.
+          </p>
           <ul class="list-disc pl-5 space-y-1">
-            <li><strong>CPU Cores Limit</strong> — Maximum CPU cores the container can use (e.g. 0.50 = half a core).</li>
+            <li>
+              <strong>CPU Cores Limit</strong> — Maximum CPU cores the container can use (e.g. 0.50 = half a core).
+            </li>
             <li><strong>Memory Limit</strong> — Maximum memory in MB the container can allocate.</li>
             <li><strong>Disk Read/Write Limit</strong> — Throttle disk I/O speed in KB/s. Set to 0 for unlimited.</li>
           </ul>
@@ -77,12 +85,17 @@ async function removeLimit(containerId: string): Promise<void> {
 
             <div>
               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
-              <Dropdown bind:value={selectedContainer} options={containerOptions} ariaLabel="Target container" />
+              <Dropdown
+                bind:value={selectedContainer}
+                options={containerOptions}
+                disabled={noRunning}
+                ariaLabel="Target container" />
             </div>
 
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">CPU Cores Limit ({(cpuPercent / 100).toFixed(2)} cores)</span>
+                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                  >CPU Cores Limit ({(cpuPercent / 100).toFixed(2)} cores)</span>
                 <SliderNumberInput bind:value={cpuPercent} minimum={1} maximum={1600} step={1} label="CPU percent" />
               </div>
               <div>
@@ -93,12 +106,24 @@ async function removeLimit(containerId: string): Promise<void> {
 
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Disk Read Limit (KB/s, 0 = no limit)</span>
-                <SliderNumberInput bind:value={deviceReadBpsKB} minimum={0} maximum={102400} step={64} label="Disk read KB/s" />
+                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                  >Disk Read Limit (KB/s, 0 = no limit)</span>
+                <SliderNumberInput
+                  bind:value={deviceReadBpsKB}
+                  minimum={0}
+                  maximum={102400}
+                  step={64}
+                  label="Disk read KB/s" />
               </div>
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Disk Write Limit (KB/s, 0 = no limit)</span>
-                <SliderNumberInput bind:value={deviceWriteBpsKB} minimum={0} maximum={102400} step={64} label="Disk write KB/s" />
+                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                  >Disk Write Limit (KB/s, 0 = no limit)</span>
+                <SliderNumberInput
+                  bind:value={deviceWriteBpsKB}
+                  minimum={0}
+                  maximum={102400}
+                  step={64}
+                  label="Disk write KB/s" />
               </div>
             </div>
 
@@ -111,31 +136,36 @@ async function removeLimit(containerId: string): Promise<void> {
                 <h2 class="text-xl pt-2 grow mb-3">Active Limits</h2>
                 <div class="space-y-2">
                   {#each Object.entries(activeLimits) as [containerId, limit]}
-                    <div class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                    <div
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
                       <div class="flex items-center gap-4 text-sm flex-wrap">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12)}
                         </span>
                         <Tooltip tip="CPU cores restriction" bottom>
-                          <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
+                          <span
+                            class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
                             CPU: {(limit.cpuPercent / 100).toFixed(2)} cores
                           </span>
                         </Tooltip>
                         <Tooltip tip="Memory restriction" bottom>
-                          <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-button-primary-bg)]">
+                          <span
+                            class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-button-primary-bg)]">
                             RAM: {limit.memoryMb} MB
                           </span>
                         </Tooltip>
                         {#if limit.deviceReadBpsKB}
                           <Tooltip tip="Disk read limit" bottom>
-                            <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+                            <span
+                              class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
                               Read: {limit.deviceReadBpsKB} KB/s
                             </span>
                           </Tooltip>
                         {/if}
                         {#if limit.deviceWriteBpsKB}
                           <Tooltip tip="Disk write limit" bottom>
-                            <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+                            <span
+                              class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
                               Write: {limit.deviceWriteBpsKB} KB/s
                             </span>
                           </Tooltip>

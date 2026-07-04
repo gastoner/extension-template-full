@@ -11,15 +11,21 @@ let isolations: IsolationRule[] = $derived(await chaos.listIsolations());
 
 let selectedContainer = $state('');
 let isolationMode: string = $state('pause');
+
+let runningContainers = $derived(containers.filter(c => c.state === 'running'));
+let containerOptions = $derived(
+  runningContainers.length > 0
+    ? runningContainers.map(c => ({ value: c.id, label: c.name }))
+    : [{ value: '', label: 'No running containers' }],
+);
+let noRunning = $derived(runningContainers.length === 0);
 let autoRestoreSec = $state(0);
 let selectedNetworks: string[] = $state([]);
 let peerContainers: string[] = $state([]);
 let errorMessage = $state('');
 let installing = $state(false);
 
-let networks: string[] = $derived(
-  selectedContainer ? await chaos.getContainerNetworks(selectedContainer) : [],
-);
+let networks: string[] = $derived(selectedContainer ? await chaos.getContainerNetworks(selectedContainer) : []);
 
 let iptablesAvailable: boolean | undefined = $derived(
   selectedContainer ? await chaos.checkContainerTool(selectedContainer, 'iptables') : undefined,
@@ -111,12 +117,6 @@ function toggleNetwork(network: string): void {
   }
 }
 
-function containerStatus(c: ContainerHealth): string {
-  if (c.isolated) return 'DEGRADED';
-  if (c.state === 'running') return 'RUNNING';
-  return 'STOPPED';
-}
-
 function getElapsedDisplay(startedAt: number): string {
   const elapsed = Math.floor((Date.now() - startedAt) / 1000);
   if (elapsed < 60) return `${elapsed}s`;
@@ -128,14 +128,30 @@ function getElapsedDisplay(startedAt: number): string {
   <div class="flex flex-col w-full h-full pt-4">
     <div class="flex flex-row w-full px-5 pb-2">
       <Expandable expanded={getExpanded('container-isolator')} onclick={val => setExpanded('container-isolator', val)}>
-        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">Container Isolator</div>{/snippet}
+        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">
+            Container Isolator
+          </div>{/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Isolate containers from each other or from the network to test fault tolerance and graceful degradation.</p>
+          <p>
+            Isolate containers from each other or from the network to test fault tolerance and graceful degradation.
+          </p>
           <ul class="list-disc pl-5 space-y-1">
-            <li><strong>Pause</strong> — Freezes all processes in the container using <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman pause</code>.</li>
-            <li><strong>Network Disconnect</strong> — Disconnects the container from selected networks, simulating a network outage.</li>
-            <li><strong>Network Partition</strong> — Blocks traffic to specific peer containers using iptables rules. Requires iptables inside the container.</li>
-            <li><strong>Auto-Restore</strong> — Automatically restores the container after the specified number of seconds (0 = manual restore only).</li>
+            <li>
+              <strong>Pause</strong> — Freezes all processes in the container using
+              <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">podman pause</code>.
+            </li>
+            <li>
+              <strong>Network Disconnect</strong> — Disconnects the container from selected networks, simulating a network
+              outage.
+            </li>
+            <li>
+              <strong>Network Partition</strong> — Blocks traffic to specific peer containers using iptables rules. Requires
+              iptables inside the container.
+            </li>
+            <li>
+              <strong>Auto-Restore</strong> — Automatically restores the container after the specified number of seconds (0
+              = manual restore only).
+            </li>
           </ul>
         </div>
       </Expandable>
@@ -150,29 +166,26 @@ function getElapsedDisplay(startedAt: number): string {
             {/if}
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div class="rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4">
-                <h2 class="text-sm font-semibold text-[var(--pd-content-header)] mb-3">Containers</h2>
-                <div class="space-y-1 max-h-80 overflow-auto">
-                  {#each containers.filter(c => c.state === 'running') as c}
-                    <button
-                      class="w-full text-left p-2 rounded-md text-sm flex items-center gap-2 transition-colors"
-                      class:bg-[var(--pd-secondary-nav-selected-bg)]={selectedContainer === c.id}
-                      class:text-[color:var(--pd-secondary-nav-text-selected)]={selectedContainer === c.id}
-                      class:text-[color:var(--pd-content-text)]={selectedContainer !== c.id}
-                      class:hover:bg-[var(--pd-content-card-bg)]={selectedContainer !== c.id}
-                      onclick={() => { selectedContainer = c.id; }}>
-                      <StatusIcon status={containerStatus(c)} />
-                      <span class="truncate">{c.name}</span>
-                      {#if c.isolated}
-                        <span class="text-[10px] opacity-60 ml-auto">{c.isolationMode}</span>
-                      {/if}
-                    </button>
-                  {/each}
-                </div>
-              </div>
+              <div class="rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 space-y-4 lg:col-span-2">
+                <h2 class="text-sm font-semibold text-[var(--pd-content-header)]">Target Container</h2>
 
-              <div class="rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 space-y-4">
-                <h2 class="text-sm font-semibold text-[var(--pd-content-header)]">Isolation Mode</h2>
+                <Dropdown
+                  bind:value={selectedContainer}
+                  options={containerOptions}
+                  disabled={noRunning}
+                  ariaLabel="Select container" />
+
+                {#if selectedContainer && !noRunning}
+                  {@const container = containers.find(c => c.id === selectedContainer)}
+                  {#if container?.isolated}
+                    <div class="flex items-center gap-2 text-xs text-[var(--pd-content-text)] opacity-70">
+                      <StatusIcon status="DEGRADED" />
+                      <span>Currently isolated ({container.isolationMode})</span>
+                    </div>
+                  {/if}
+                {/if}
+
+                <h2 class="text-sm font-semibold text-[var(--pd-content-header)] pt-2">Isolation Mode</h2>
 
                 <Dropdown bind:value={isolationMode} options={modeOptions} ariaLabel="Isolation mode" />
 
@@ -187,8 +200,12 @@ function getElapsedDisplay(startedAt: number): string {
                       <p class="text-xs text-[var(--pd-content-text)] opacity-50">Select a container first</p>
                     {:else}
                       {#each networks as network}
-                        <Checkbox checked={selectedNetworks.includes(network)} onclick={() => toggleNetwork(network)} title={network}>
-                          {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{network}</span>{/snippet}
+                        <Checkbox
+                          checked={selectedNetworks.includes(network)}
+                          onclick={() => toggleNetwork(network)}
+                          title={network}>
+                          {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{network}</span
+                            >{/snippet}
                         </Checkbox>
                       {/each}
                     {/if}
@@ -196,7 +213,8 @@ function getElapsedDisplay(startedAt: number): string {
                 {:else if isolationMode === 'network-partition'}
                   <div>
                     {#if selectedContainer && iptablesAvailable === false}
-                      <div class="flex items-center justify-between rounded-lg bg-[var(--pd-status-starting)] text-[var(--pd-status-contrast)] p-3 text-sm mb-3">
+                      <div
+                        class="flex items-center justify-between rounded-lg bg-[var(--pd-status-starting)] text-[var(--pd-status-contrast)] p-3 text-sm mb-3">
                         <span>Container is missing <strong>iptables</strong>.</span>
                         <Button type="secondary" onclick={installIptables} disabled={installing}>
                           {installing ? 'Installing...' : 'Install iptables'}
@@ -205,16 +223,26 @@ function getElapsedDisplay(startedAt: number): string {
                     {/if}
                     <span class="block text-xs text-[var(--pd-content-text)] mb-2">Block traffic to peers:</span>
                     {#each containers.filter(c => c.state === 'running' && c.id !== selectedContainer) as peer}
-                        <Checkbox checked={peerContainers.includes(peer.id)} onclick={() => togglePeer(peer.id)} title={peer.name}>
-                          {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{peer.name}</span>{/snippet}
-                        </Checkbox>
+                      <Checkbox
+                        checked={peerContainers.includes(peer.id)}
+                        onclick={() => togglePeer(peer.id)}
+                        title={peer.name}>
+                        {#snippet children()}<span class="text-sm text-[var(--pd-content-text)]">{peer.name}</span
+                          >{/snippet}
+                      </Checkbox>
                     {/each}
                   </div>
                 {/if}
 
                 <div>
-                  <span class="block text-xs text-[var(--pd-content-text)] mb-1">Auto-restore after (sec, 0 = manual)</span>
-                  <SliderNumberInput bind:value={autoRestoreSec} minimum={0} maximum={3600} step={10} label="Auto-restore seconds" />
+                  <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                    >Auto-restore after (sec, 0 = manual)</span>
+                  <SliderNumberInput
+                    bind:value={autoRestoreSec}
+                    minimum={0}
+                    maximum={3600}
+                    step={10}
+                    label="Auto-restore seconds" />
                 </div>
 
                 <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
@@ -234,14 +262,16 @@ function getElapsedDisplay(startedAt: number): string {
                 {:else}
                   <div class="space-y-2">
                     {#each isolations as iso}
-                      <div class="rounded-md border-l-4 border-[var(--pd-status-starting)] bg-[var(--pd-content-card-bg)] p-3">
+                      <div
+                        class="rounded-md border-l-4 border-[var(--pd-status-starting)] bg-[var(--pd-content-card-bg)] p-3">
                         <div class="flex items-center justify-between mb-1">
                           <span class="font-medium text-sm text-[var(--pd-content-header)]">{iso.containerName}</span>
                           <Button type="secondary" onclick={restore.bind(undefined, iso.containerId)}>Restore</Button>
                         </div>
                         <div class="text-xs text-[var(--pd-content-text)] opacity-70 space-x-2">
                           <Tooltip tip="Isolation type" bottom>
-                            <span class="px-1.5 py-0.5 rounded text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
+                            <span
+                              class="px-1.5 py-0.5 rounded text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
                               {iso.mode}
                             </span>
                           </Tooltip>

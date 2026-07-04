@@ -19,17 +19,21 @@
 import * as extensionApi from '@podman-desktop/api';
 import type { NetworkRule } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import type { AffectedRegistry } from './affected-registry';
 
 export class NetworkShaper {
   private activeRules: Map<string, NetworkRule> = new Map();
   private safePatterns: RegExp[] = [];
+  private registry: AffectedRegistry | undefined;
 
   constructor(private readonly containerService: ContainerService) {}
 
+  setRegistry(registry: AffectedRegistry): void {
+    this.registry = registry;
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -38,7 +42,11 @@ export class NetworkShaper {
 
   private async execTc(containerId: string, tcArgs: string[]): Promise<void> {
     await extensionApi.process.exec('podman', [
-      'exec', '--privileged', containerId, 'sh', '-c',
+      'exec',
+      '--privileged',
+      containerId,
+      'sh',
+      '-c',
       `PATH="$PATH:/sbin:/usr/sbin:/usr/local/sbin" tc ${tcArgs.join(' ')}`,
     ]);
   }
@@ -54,11 +62,13 @@ export class NetworkShaper {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
 
+    await this.registry?.markAffected(rule.containerId, 'network-shape');
+
     const hasTc = await this.containerService.checkToolAvailability(rule.containerId, 'tc');
     if (!hasTc) {
       throw new Error(
         `Container ${rule.containerId} does not have 'tc' (iproute2) installed. ` +
-        'Network shaping requires iproute2 inside the target container.',
+          'Network shaping requires iproute2 inside the target container.',
       );
     }
 
@@ -85,7 +95,10 @@ export class NetworkShaper {
     if (rule.dnsBlock && rule.dnsBlock.length > 0) {
       for (const host of rule.dnsBlock) {
         await extensionApi.process.exec('podman', [
-          'exec', rule.containerId, 'sh', '-c',
+          'exec',
+          rule.containerId,
+          'sh',
+          '-c',
           `echo "127.0.0.1 ${host}" >> /etc/hosts`,
         ]);
       }
@@ -109,7 +122,10 @@ export class NetworkShaper {
       for (const host of rule.dnsBlock) {
         try {
           await extensionApi.process.exec('podman', [
-            'exec', containerId, 'sh', '-c',
+            'exec',
+            containerId,
+            'sh',
+            '-c',
             `sed -i '/127.0.0.1 ${host}/d' /etc/hosts`,
           ]);
         } catch (err: unknown) {
@@ -119,6 +135,7 @@ export class NetworkShaper {
     }
 
     this.activeRules.delete(containerId);
+    this.registry?.removeAttack(containerId, 'network-shape');
     console.log(`Network shaping removed from ${containerId}`);
   }
 

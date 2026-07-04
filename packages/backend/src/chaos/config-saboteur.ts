@@ -19,6 +19,7 @@
 import * as extensionApi from '@podman-desktop/api';
 import type { ConfigSabotage, SabotageType } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import type { AffectedRegistry } from './affected-registry';
 
 interface SabotageEntry {
   sabotage: ConfigSabotage;
@@ -29,13 +30,16 @@ interface SabotageEntry {
 export class ConfigSaboteur {
   private activeSabotages: Map<string, SabotageEntry> = new Map();
   private safePatterns: RegExp[] = [];
+  private registry: AffectedRegistry | undefined;
 
   constructor(private readonly containerService: ContainerService) {}
 
+  setRegistry(registry: AffectedRegistry): void {
+    this.registry = registry;
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -61,6 +65,8 @@ export class ConfigSaboteur {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
 
+    await this.registry?.markAffected(containerId, `config-${type}`);
+
     if (this.activeSabotages.has(containerId)) {
       await this.restore(containerId);
     }
@@ -84,17 +90,13 @@ export class ConfigSaboteur {
 
     let originalContent = '';
     try {
-      const result = await extensionApi.process.exec('podman', [
-        'exec', containerId, 'cat', filePath,
-      ]);
+      const result = await extensionApi.process.exec('podman', ['exec', containerId, 'cat', filePath]);
       originalContent = result.stdout;
     } catch {
       // file may not exist
     }
 
-    await extensionApi.process.exec('podman', [
-      'exec', containerId, 'sh', '-c', corruptCmd,
-    ]);
+    await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', corruptCmd]);
 
     this.activeSabotages.set(containerId, {
       sabotage: { containerId, containerName, type, targetFile: filePath, startedAt: Date.now() },
@@ -112,13 +114,19 @@ export class ConfigSaboteur {
     try {
       const escaped = entry.originalContent.replace(/'/g, "'\\''");
       await extensionApi.process.exec('podman', [
-        'exec', containerId, 'sh', '-c', `printf '%s' '${escaped}' > ${entry.targetFile}`,
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        `printf '%s' '${escaped}' > ${entry.targetFile}`,
       ]);
     } catch (err) {
       console.warn(`Failed to restore ${entry.targetFile} in ${containerId}:`, err);
     }
 
+    const sabotageType = entry.sabotage.type;
     this.activeSabotages.delete(containerId);
+    this.registry?.removeAttack(containerId, `config-${sabotageType}`);
     console.log(`Config restored for ${containerId}`);
   }
 

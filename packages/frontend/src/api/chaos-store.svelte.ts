@@ -1,5 +1,6 @@
 import { chaosClient } from './client';
 import type {
+  AffectedContainerState,
   ChaosState,
   ContainerHealth,
   Scenario,
@@ -150,5 +151,25 @@ export async function disableChaosMode(): Promise<void> {
 
 export async function installContainerTool(containerId: string, tool: string): Promise<void> {
   await chaosClient.installContainerTool(containerId, tool);
+  invalidate();
+}
+
+export async function runScenarioOnce(id: string): Promise<void> {
+  await chaosClient.runScenarioOnce(id);
+  invalidate();
+}
+
+export async function getAffectedContainers(): Promise<AffectedContainerState[]> {
+  void version;
+  return chaosClient.getAffectedContainers();
+}
+
+export async function revertContainer(containerId: string): Promise<void> {
+  await chaosClient.revertContainer(containerId);
+  invalidate();
+}
+
+export async function revertAllContainers(): Promise<void> {
+  await chaosClient.revertAllContainers();
   invalidate();
 }

@@ -19,6 +19,7 @@
 import * as extensionApi from '@podman-desktop/api';
 import type { ResourceLimit } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import type { AffectedRegistry } from './affected-registry';
 
 interface OriginalLimits {
   cpus: string;
@@ -29,13 +30,16 @@ export class ResourceLimiter {
   private activeLimits: Map<string, ResourceLimit> = new Map();
   private originalLimits: Map<string, OriginalLimits> = new Map();
   private safePatterns: RegExp[] = [];
+  private registry: AffectedRegistry | undefined;
 
   constructor(private readonly containerService: ContainerService) {}
 
+  setRegistry(registry: AffectedRegistry): void {
+    this.registry = registry;
+  }
+
   setSafePatterns(patterns: string[]): void {
-    this.safePatterns = patterns
-      .filter(Boolean)
-      .map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
+    this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
 
   private isSafe(name: string): boolean {
@@ -52,6 +56,8 @@ export class ResourceLimiter {
     if (target && this.isSafe(target.name)) {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
+
+    await this.registry?.markAffected(limit.containerId, 'resource-limit');
 
     if (!this.originalLimits.has(limit.containerId)) {
       try {
@@ -114,6 +120,7 @@ export class ResourceLimiter {
 
     this.activeLimits.delete(containerId);
     this.originalLimits.delete(containerId);
+    this.registry?.removeAttack(containerId, 'resource-limit');
     console.log(`Resource limits restored for ${containerId}`);
   }
 

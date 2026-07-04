@@ -42,10 +42,17 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   chaosEngine = new ChaosEngine(containerService);
   chaosEngine.setSafePatterns(settings.chaosSafeContainers);
+
+  const storagePath = extensionContext.storagePath;
+  chaosEngine.affectedRegistry.setStoragePath(storagePath);
+  chaosEngine.scheduler.setStoragePath(storagePath);
+  await chaosEngine.affectedRegistry.load();
+  await chaosEngine.scheduler.load();
+
   extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
 
   const chaosApiImpl = new ChaosApiImpl(chaosEngine, containerService);
-  chaosApiImpl.setNotificationsEnabled(settings.showNotifications);
+  await chaosApiImpl.setNotificationsEnabled(settings.showNotifications);
 
   const panel = extensionApi.window.createWebviewPanel('chaos-lab', 'Chaos Lab', {
     localResourceRoots: [extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media')],
@@ -56,9 +63,9 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   const indexHtmlPath = indexHtmlUri.fsPath;
   let indexHtml = await fs.promises.readFile(indexHtmlPath, 'utf8');
 
-  const scriptLink = indexHtml.match(/<script.*?src="(.*?)".*?>/g);
-  if (scriptLink) {
-    scriptLink.forEach(link => {
+  const scriptLinks = indexHtml.match(/<script.*?src="(.*?)".*?>/g);
+  if (scriptLinks) {
+    scriptLinks.forEach(link => {
       const src = link.match(/src="(.*?)"/);
       if (src) {
         const webviewUri = panel.webview.asWebviewUri(
@@ -69,15 +76,28 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     });
   }
 
-  const cssLink = indexHtml.match(/<link.*?href="(.*?)".*?>/g);
-  if (cssLink) {
-    cssLink.forEach(link => {
+  const cssLinks = indexHtml.match(/<link.*?href="(.*?)".*?>/g);
+  if (cssLinks) {
+    cssLinks.forEach(link => {
       const href = link.match(/href="(.*?)"/);
       if (href) {
         const webviewUri = panel.webview.asWebviewUri(
           extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', href[1]),
         );
         indexHtml = indexHtml.replace(href[1], webviewUri.toString());
+      }
+    });
+  }
+
+  const fontUrls = indexHtml.match(/url\((\/[^)]+\.woff2?)\)/g);
+  if (fontUrls) {
+    fontUrls.forEach(match => {
+      const urlPath = match.match(/url\((\/[^)]+)\)/);
+      if (urlPath) {
+        const webviewUri = panel.webview.asWebviewUri(
+          extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', urlPath[1]),
+        );
+        indexHtml = indexHtml.replace(urlPath[1], webviewUri.toString());
       }
     });
   }
@@ -89,7 +109,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   settingsManager.onSettingsChanged(newSettings => {
     chaosEngine?.setSafePatterns(newSettings.chaosSafeContainers);
-    chaosApiImpl.setNotificationsEnabled(newSettings.showNotifications);
+    void chaosApiImpl.setNotificationsEnabled(newSettings.showNotifications);
 
     if (chaosStatusBar) {
       if (newSettings.showStatusBarChaos) {
@@ -120,9 +140,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     if (state.runningAttacks > 0) parts.push(`${state.runningAttacks} active`);
     if (state.killCount > 0) parts.push(`${state.killCount} killed`);
 
-    chaosStatusBar.text = parts.length > 0
-      ? `Chaos Lab (${parts.join(' | ')})`
-      : 'Chaos Lab';
+    chaosStatusBar.text = parts.length > 0 ? `Chaos Lab (${parts.join(' | ')})` : 'Chaos Lab';
   }, 3000);
   extensionContext.subscriptions.push({
     dispose: () => {
@@ -135,9 +153,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
 
   const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
     await chaosApiImpl.stopAllChaos();
-    extensionApi.window.showInformationMessage(
-      'All chaos operations have been stopped and rolled back.',
-    );
+    void extensionApi.window.showInformationMessage('All chaos operations have been stopped and rolled back.');
   });
   extensionContext.subscriptions.push(stopAllCommand);
 
@@ -207,7 +223,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
       chaosEngine?.incrementKillCount();
       const containers = await containerService.listContainers();
       const name = containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12);
-      extensionApi.window.showWarningMessage(`Container ${name} killed`);
+      void extensionApi.window.showWarningMessage(`Container ${name} killed`);
     },
   );
   extensionContext.subscriptions.push(killCommand);
@@ -222,6 +238,39 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   );
   extensionContext.subscriptions.push(stressCommand);
 
+  const runScenarioCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.runScenario',
+    async (args: { id?: string; name?: string }) => {
+      const scenarios = chaosEngine!.scheduler.listScenarios();
+      const target = args?.id
+        ? scenarios.find(s => s.id === args.id)
+        : args?.name
+          ? scenarios.find(s => s.name === args.name)
+          : undefined;
+      if (!target) {
+        void extensionApi.window.showWarningMessage('Scenario not found');
+        return;
+      }
+      await chaosApiImpl.runScenarioOnce(target.id);
+    },
+  );
+  extensionContext.subscriptions.push(runScenarioCommand);
+
+  const revertAllCommand = extensionApi.commands.registerCommand('chaos-lab.revertAll', async () => {
+    await chaosApiImpl.revertAllContainers();
+  });
+  extensionContext.subscriptions.push(revertAllCommand);
+
+  const revertContainerCommand = extensionApi.commands.registerCommand(
+    'chaos-lab.revertContainer',
+    async (container: { id?: string; Id?: string }) => {
+      const containerId = container?.id ?? container?.Id;
+      if (!containerId) return;
+      await chaosApiImpl.revertContainer(containerId);
+    },
+  );
+  extensionContext.subscriptions.push(revertContainerCommand);
+
   const trayItem = extensionApi.tray.registerMenuItem({
     id: 'chaos-lab.tray',
     type: 'submenu',
@@ -234,16 +283,13 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   });
   extensionContext.subscriptions.push(trayItem);
 
-  const toggleChaosModeCommand = extensionApi.commands.registerCommand(
-    'chaos-lab.toggleChaosMode',
-    async () => {
-      if (chaosEngine?.chaosModeActive) {
-        await chaosApiImpl.disableChaosMode();
-      } else {
-        await chaosApiImpl.enableChaosMode(30);
-      }
-    },
-  );
+  const toggleChaosModeCommand = extensionApi.commands.registerCommand('chaos-lab.toggleChaosMode', async () => {
+    if (chaosEngine?.chaosModeActive) {
+      await chaosApiImpl.disableChaosMode();
+    } else {
+      await chaosApiImpl.enableChaosMode(30);
+    }
+  });
   extensionContext.subscriptions.push(toggleChaosModeCommand);
 
   registerChaosProvider(extensionContext);

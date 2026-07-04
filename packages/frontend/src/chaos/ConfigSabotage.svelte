@@ -13,13 +13,13 @@ let sabotageType: SabotageType = $state('dns-blackhole');
 let targetFile = $state('/etc/hostname');
 let errorMessage = $state('');
 
+let runningContainers = $derived(containers.filter(c => c.state === 'running'));
 let containerOptions = $derived(
-  [{ value: '', label: 'Select container...' }].concat(
-    containers
-      .filter(c => c.state === 'running')
-      .map(c => ({ value: c.id, label: c.name })),
-  ),
+  runningContainers.length > 0
+    ? runningContainers.map(c => ({ value: c.id, label: c.name }))
+    : [{ value: '', label: 'No running containers' }],
 );
+let noRunning = $derived(runningContainers.length === 0);
 
 const sabotageTypeOptions = [
   { value: 'dns-blackhole', label: 'DNS Blackhole' },
@@ -60,12 +60,24 @@ function formatElapsed(startedAt: number): string {
   <div class="flex flex-col w-full h-full pt-4">
     <div class="flex flex-row w-full px-5 pb-2">
       <Expandable expanded={getExpanded('config-sabotage')} onclick={val => setExpanded('config-sabotage', val)}>
-        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">Config Sabotage</div>{/snippet}
+        {#snippet title()}<div class="text-xl font-bold capitalize text-[var(--pd-content-header)]">
+            Config Sabotage
+          </div>{/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Corrupt configuration files inside a running container to test how your application handles broken configs. Original file contents are saved for rollback.</p>
+          <p>
+            Corrupt configuration files inside a running container to test how your application handles broken configs.
+            Original file contents are saved for rollback.
+          </p>
           <ul class="list-disc pl-5 space-y-1">
-            <li><strong>DNS Blackhole</strong> — Overwrites <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">/etc/resolv.conf</code> with a loopback nameserver, breaking all DNS resolution inside the container.</li>
-            <li><strong>File Corruption</strong> — Overwrites a specified file with random binary data. Use this to test how your app handles corrupted config files, certificates, or data files.</li>
+            <li>
+              <strong>DNS Blackhole</strong> — Overwrites
+              <code class="text-xs bg-[var(--pd-input-field-bg)] px-1 rounded">/etc/resolv.conf</code> with a loopback nameserver,
+              breaking all DNS resolution inside the container.
+            </li>
+            <li>
+              <strong>File Corruption</strong> — Overwrites a specified file with random binary data. Use this to test how
+              your app handles corrupted config files, certificates, or data files.
+            </li>
           </ul>
         </div>
       </Expandable>
@@ -81,7 +93,11 @@ function formatElapsed(startedAt: number): string {
 
             <div>
               <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
-              <Dropdown bind:value={selectedContainer} options={containerOptions} ariaLabel="Target container" />
+              <Dropdown
+                bind:value={selectedContainer}
+                options={containerOptions}
+                disabled={noRunning}
+                ariaLabel="Target container" />
             </div>
 
             <div>
@@ -113,13 +129,15 @@ function formatElapsed(startedAt: number): string {
                 <h2 class="text-xl pt-2 grow mb-3">Active Sabotages</h2>
                 <div class="space-y-2">
                   {#each activeSabotages as sabotage}
-                    <div class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                    <div
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
                       <div class="flex items-center gap-4 text-sm">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {sabotage.containerName}
                         </span>
                         <Tooltip tip="Sabotage type" bottom>
-                          <span class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+                          <span
+                            class="px-2 py-0.5 rounded text-xs text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
                             {sabotage.type}
                           </span>
                         </Tooltip>

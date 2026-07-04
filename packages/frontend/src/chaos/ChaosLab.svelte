@@ -11,9 +11,7 @@ let containers: ContainerHealth[] = $derived(await chaos.getContainerHealth());
 let errorMessage = $state('');
 let actionInProgress = $state(false);
 
-let affectedContainers = $derived(
-  containers.filter(c => c.activeAttacks.length > 0 || c.isolated),
-);
+let affectedContainers = $derived(containers.filter(c => c.activeAttacks.length > 0 || c.isolated));
 
 async function stopAll(): Promise<void> {
   if (actionInProgress) return;
@@ -67,14 +65,13 @@ async function startQuickChaos(): Promise<void> {
   }
 }
 
-async function action(event: MouseEvent, fn: () => Promise<void>): Promise<void> {
-  event.stopPropagation();
-  try {
+function action(fn: () => Promise<void>): () => void {
+  return () => {
     errorMessage = '';
-    await fn();
-  } catch (err) {
-    errorMessage = `Action failed: ${err instanceof Error ? err.message : String(err)}`;
-  }
+    fn().catch(err => {
+      errorMessage = `Action failed: ${err instanceof Error ? err.message : String(err)}`;
+    });
+  };
 }
 
 function containerStatus(c: ContainerHealth): string {
@@ -104,13 +101,19 @@ function formatBytes(mb: number): string {
               {#if chaosState}
                 {#if chaosState.killCount > 0}
                   <Tooltip tip="{chaosState.killCount} containers killed this session" bottom>
-                    <span class="px-3 py-1 rounded-full text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-stopped)]">
+                    <span
+                      class="px-3 py-1 rounded-full text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-stopped)]">
                       {chaosState.killCount} KILLED
                     </span>
                   </Tooltip>
                 {/if}
-                <Tooltip tip={chaosState.runningAttacks > 0 ? `${chaosState.runningAttacks} active operations` : 'No active chaos'} bottom>
-                  <span class="px-3 py-1 rounded-full text-xs font-medium text-[var(--pd-status-contrast)]"
+                <Tooltip
+                  tip={chaosState.runningAttacks > 0
+                    ? `${chaosState.runningAttacks} active operations`
+                    : 'No active chaos'}
+                  bottom>
+                  <span
+                    class="px-3 py-1 rounded-full text-xs font-medium text-[var(--pd-status-contrast)]"
                     class:bg-[var(--pd-status-running)]={chaosState.runningAttacks === 0}
                     class:bg-[var(--pd-status-degraded)]={chaosState.runningAttacks > 0}>
                     {chaosState.runningAttacks > 0 ? `${chaosState.runningAttacks} ACTIVE` : 'IDLE'}
@@ -126,7 +129,10 @@ function formatBytes(mb: number): string {
           </div>
         {/snippet}
         <div class="flex flex-col gap-2 text-sm text-[var(--pd-content-text)]">
-          <p>Monitor containers affected by chaos operations. Only containers with active attacks or isolations are shown here.</p>
+          <p>
+            Monitor containers affected by chaos operations. Only containers with active attacks or isolations are shown
+            here.
+          </p>
           <p>Use the chaos mode toggle below to randomly kill containers, or click "Start making chaos" to begin.</p>
         </div>
       </Expandable>
@@ -155,11 +161,10 @@ function formatBytes(mb: number): string {
                 </span>
               </button>
               <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-[var(--pd-content-header)]">
-                  CHAOS MODE
-                </span>
+                <span class="text-sm font-semibold text-[var(--pd-content-header)]"> CHAOS MODE </span>
                 {#if chaosState?.chaosModeActive}
-                  <span class="px-2 py-0.5 rounded text-xs font-bold text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)] animate-pulse">
+                  <span
+                    class="px-2 py-0.5 rounded text-xs font-bold text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)] animate-pulse">
                     ACTIVE
                   </span>
                   <span class="text-xs text-[var(--pd-content-text)]">Killing a random container every 30s</span>
@@ -209,7 +214,8 @@ function formatBytes(mb: number): string {
                         </Tooltip>
                       </div>
                       {#if container.isolated}
-                        <span class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
+                        <span
+                          class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-starting)]">
                           {container.isolationMode}
                         </span>
                       {/if}
@@ -220,24 +226,38 @@ function formatBytes(mb: number): string {
                     {#if container.stats}
                       {@const cpuUsedCores = container.stats.cpuPercent / 100}
                       {@const cpuLimitCores = container.stats.cpuLimitPercent / 100}
-                      {@const cpuBarPercent = cpuLimitCores > 0 ? (cpuUsedCores / cpuLimitCores) * 100 : container.stats.cpuPercent}
+                      {@const cpuBarPercent =
+                        cpuLimitCores > 0 ? (cpuUsedCores / cpuLimitCores) * 100 : container.stats.cpuPercent}
                       <div class="space-y-2">
                         <div class="flex items-center gap-2 text-xs text-[var(--pd-content-text)]">
                           <span class="w-8 shrink-0">CPU</span>
                           <div class="flex-1 h-1.5 rounded-full bg-[var(--pd-input-field-bg)] overflow-hidden">
-                            <div class="h-full rounded-full transition-all"
+                            <div
+                              class="h-full rounded-full transition-all"
                               class:bg-[var(--pd-status-degraded)]={cpuBarPercent > 80}
                               class:bg-[var(--pd-button-primary-bg)]={cpuBarPercent <= 80}
-                              style="width: {Math.min(cpuBarPercent, 100)}%"></div>
+                              style="width: {Math.min(cpuBarPercent, 100)}%">
+                            </div>
                           </div>
-                          <span class="w-24 text-right truncate">{cpuUsedCores.toFixed(2)}{#if cpuLimitCores > 0} / {cpuLimitCores.toFixed(1)}{/if} vCPU</span>
+                          <span class="w-24 text-right truncate"
+                            >{cpuUsedCores.toFixed(2)}{#if cpuLimitCores > 0}
+                              / {cpuLimitCores.toFixed(1)}{/if} vCPU</span>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-[var(--pd-content-text)]">
                           <span class="w-8 shrink-0">RAM</span>
                           <div class="flex-1 h-1.5 rounded-full bg-[var(--pd-input-field-bg)] overflow-hidden">
-                            <div class="h-full rounded-full bg-[var(--pd-button-secondary-bg)] transition-all" style="width: {Math.min((container.stats.memoryUsageMb / container.stats.memoryLimitMb) * 100, 100)}%"></div>
+                            <div
+                              class="h-full rounded-full bg-[var(--pd-button-secondary-bg)] transition-all"
+                              style="width: {Math.min(
+                                (container.stats.memoryUsageMb / container.stats.memoryLimitMb) * 100,
+                                100,
+                              )}%">
+                            </div>
                           </div>
-                          <span class="w-24 text-right truncate">{formatBytes(container.stats.memoryUsageMb)} / {formatBytes(container.stats.memoryLimitMb)}</span>
+                          <span class="w-24 text-right truncate"
+                            >{formatBytes(container.stats.memoryUsageMb)} / {formatBytes(
+                              container.stats.memoryLimitMb,
+                            )}</span>
                         </div>
                         <div class="flex justify-between text-xs text-[var(--pd-content-text)]">
                           <span>Net I/O</span>
@@ -245,7 +265,10 @@ function formatBytes(mb: number): string {
                         </div>
                         <div class="flex justify-between text-xs text-[var(--pd-content-text)]">
                           <span>Block I/O</span>
-                          <span>{formatBytes(container.stats.blockReadMb)} / {formatBytes(container.stats.blockWriteMb)}</span>
+                          <span
+                            >{formatBytes(container.stats.blockReadMb)} / {formatBytes(
+                              container.stats.blockWriteMb,
+                            )}</span>
                         </div>
                       </div>
                     {/if}
@@ -253,7 +276,8 @@ function formatBytes(mb: number): string {
                       <div class="mt-3 flex flex-wrap gap-1">
                         {#each container.activeAttacks as attack}
                           <Tooltip tip="{attack.type} attack active" bottom>
-                            <span class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
+                            <span
+                              class="px-2 py-0.5 rounded text-xs font-medium text-[var(--pd-status-contrast)] bg-[var(--pd-status-degraded)]">
                               {attack.type}
                             </span>
                           </Tooltip>
@@ -262,19 +286,24 @@ function formatBytes(mb: number): string {
                     {/if}
                     <div class="mt-3 flex flex-wrap gap-2 border-t border-[var(--pd-input-field-bg)] pt-3">
                       {#if container.isolated}
-                        <Button type="secondary" onclick={(e: MouseEvent) => action(e, () => chaos.restoreContainer(container.id))}>Restore</Button>
+                        <Button type="secondary" onclick={action(() => chaos.restoreContainer(container.id))}
+                          >Restore</Button>
                       {/if}
                       {#if chaosState?.stressInjections[container.id]}
-                        <Button type="secondary" onclick={(e: MouseEvent) => action(e, () => chaos.stopStress(container.id))}>Stop Stress</Button>
+                        <Button type="secondary" onclick={action(() => chaos.stopStress(container.id))}
+                          >Stop Stress</Button>
                       {/if}
                       {#if chaosState?.networkRules[container.id]}
-                        <Button type="secondary" onclick={(e: MouseEvent) => action(e, () => chaos.removeNetworkRule(container.id))}>Remove Net Rule</Button>
+                        <Button type="secondary" onclick={action(() => chaos.removeNetworkRule(container.id))}
+                          >Remove Net Rule</Button>
                       {/if}
                       {#if chaosState?.resourceLimits[container.id]}
-                        <Button type="secondary" onclick={(e: MouseEvent) => action(e, () => chaos.removeResourceLimit(container.id))}>Remove Limit</Button>
+                        <Button type="secondary" onclick={action(() => chaos.removeResourceLimit(container.id))}
+                          >Remove Limit</Button>
                       {/if}
                       {#if chaosState?.configSabotages[container.id]}
-                        <Button type="secondary" onclick={(e: MouseEvent) => action(e, () => chaos.restoreConfig(container.id))}>Restore Config</Button>
+                        <Button type="secondary" onclick={action(() => chaos.restoreConfig(container.id))}
+                          >Restore Config</Button>
                       {/if}
                     </div>
                   </div>
