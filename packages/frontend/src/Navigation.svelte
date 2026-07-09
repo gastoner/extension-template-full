@@ -10,7 +10,6 @@ import {
   faTornado,
   faFire,
   faBiohazard,
-  faHistory,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { page } from '$app/state';
@@ -35,7 +34,6 @@ const navEntries: NavEntry[] = [
   { icon: faBan, title: 'Container Isolator', href: '/chaos/isolate' },
   { icon: faFire, title: 'Stress Injector', href: '/chaos/stress' },
   { icon: faBiohazard, title: 'Config Sabotage', href: '/chaos/config' },
-  { icon: faHistory, title: 'Affected Containers', href: '/chaos/affected' },
 ];
 
 function loadWidth(): number {

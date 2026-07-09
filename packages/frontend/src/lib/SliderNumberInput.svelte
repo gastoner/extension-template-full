@@ -20,7 +20,7 @@ let { value = $bindable(), minimum = 0, maximum = 100, step = 1, label = '' }: P
     max={maximum}
     step={step}
     aria-label={label}
-    class="flex-1 h-1 bg-[var(--pd-input-toggle-on-bg)] rounded-lg appearance-none accent-[var(--pd-input-toggle-on-bg)] cursor-pointer" />
+    class="w-full h-1 bg-[var(--pd-input-toggle-on-bg)] rounded-lg appearance-none accent-[var(--pd-input-toggle-on-bg)] cursor-pointer" />
   <NumberInput
     class="w-24"
     bind:value={value}

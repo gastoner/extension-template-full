@@ -16,10 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import fs from 'node:fs';
+import path from 'node:path';
 import * as extensionApi from '@podman-desktop/api';
 import type { StressInjection, StressType } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { AffectedRegistry } from './affected-registry';
+import { StressInjectionSchema, parsePersistedArray } from './persistence-schemas';
 
 const STRESS_MARKER = 'CHAOS_LAB_STRESS';
 
@@ -27,11 +30,44 @@ export class StressInjector {
   private activeStress: Map<string, StressInjection> = new Map();
   private safePatterns: RegExp[] = [];
   private registry: AffectedRegistry | undefined;
+  private storagePath: string | undefined;
+  private readonly fileName = 'stress-injections.json';
 
   constructor(private readonly containerService: ContainerService) {}
 
   setRegistry(registry: AffectedRegistry): void {
     this.registry = registry;
+  }
+
+  setStoragePath(storagePath: string): void {
+    this.storagePath = storagePath;
+  }
+
+  async save(): Promise<void> {
+    if (!this.storagePath) return;
+    try {
+      await fs.promises.mkdir(this.storagePath, { recursive: true });
+      const filePath = path.join(this.storagePath, this.fileName);
+      const data = JSON.stringify(Array.from(this.activeStress.values()), undefined, 2);
+      await fs.promises.writeFile(filePath, data, 'utf8');
+    } catch (err) {
+      console.warn('Failed to save stress injections:', err);
+    }
+  }
+
+  async load(): Promise<void> {
+    if (!this.storagePath) return;
+    const filePath = path.join(this.storagePath, this.fileName);
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const injections = parsePersistedArray(JSON.parse(raw), StressInjectionSchema, this.fileName);
+      this.activeStress.clear();
+      for (const injection of injections) {
+        this.activeStress.set(injection.containerId, injection);
+      }
+    } catch {
+      // file doesn't exist or is malformed — start fresh
+    }
   }
 
   setSafePatterns(patterns: string[]): void {
@@ -61,8 +97,6 @@ export class StressInjector {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
 
-    await this.registry?.markAffected(containerId, `stress-${type}`);
-
     if (this.activeStress.has(containerId)) {
       await this.stop(containerId);
     }
@@ -77,14 +111,14 @@ export class StressInjector {
         break;
       }
       case 'memory': {
-        const cmd = `${STRESS_MARKER}=1 sh -c 'head -c ${targetMb}M /dev/urandom | tail -c ${targetMb}M | cat > /dev/null & sleep infinity'`;
+        const cmd = `${STRESS_MARKER}=1 sh -c 'dd if=/dev/urandom bs=1M count=${targetMb} of=/dev/shm/chaos_ballast 2>/dev/null; sleep infinity'`;
         await this.execDetached(containerId, cmd);
         break;
       }
       case 'memory-oom': {
         const memLimit = await this.getContainerMemoryLimit(containerId);
         const chunkMb = memLimit > 0 ? Math.max(10, Math.floor(memLimit / (1024 * 1024 * 10))) : 50;
-        const oomCmd = `${STRESS_MARKER}=1 sh -c 'i=0; while true; do dd if=/dev/urandom bs=${chunkMb}M count=1 2>/dev/null >> /tmp/.chaos_oom_$i; i=$((i+1)); done'`;
+        const oomCmd = `${STRESS_MARKER}=1 sh -c 'i=0; while true; do dd if=/dev/urandom of=/dev/shm/chaos_oom_$i bs=1M count=${chunkMb} 2>/dev/null; i=$((i+1)); done'`;
         await this.execDetached(containerId, oomCmd);
         break;
       }
@@ -103,6 +137,11 @@ export class StressInjector {
       targetMb,
       startedAt: Date.now(),
     });
+    await this.save();
+    // Marked as affected only now that the injection is tracked in-memory, for consistency
+    // with the other subsystems (keeps the registry from ever recording an attack that the
+    // subsystem itself doesn't know about).
+    await this.registry?.markAffected(containerId, `stress-${type}`);
 
     console.log(`Stress injection (${type}) started on ${containerName}`);
   }
@@ -118,7 +157,8 @@ export class StressInjector {
         'sh',
         '-c',
         `ps aux 2>/dev/null | grep '${STRESS_MARKER}' | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null; ` +
-          `pgrep -f '${STRESS_MARKER}' 2>/dev/null | xargs -r kill -9 2>/dev/null; true`,
+          `pgrep -f '${STRESS_MARKER}' 2>/dev/null | xargs -r kill -9 2>/dev/null; ` +
+          `rm -f /dev/shm/chaos_ballast /dev/shm/chaos_oom_* 2>/dev/null; true`,
       ]);
     } catch {
       // container may have stopped
@@ -126,7 +166,8 @@ export class StressInjector {
 
     const stressType = entry.type;
     this.activeStress.delete(containerId);
-    this.registry?.removeAttack(containerId, `stress-${stressType}`);
+    await this.save();
+    await this.registry?.removeAttack(containerId, `stress-${stressType}`);
     console.log(`Stress injection stopped on ${containerId}`);
   }
 

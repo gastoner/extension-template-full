@@ -25,6 +25,7 @@ import type { ResourceLimiter } from './resource-limiter';
 import type { StressInjector } from './stress-injector';
 import type { ConfigSaboteur } from './config-saboteur';
 import type { ChaosEngine } from './chaos-engine';
+import { ScenarioSchema, parsePersistedArray } from './persistence-schemas';
 
 interface AffectedContainer {
   attackType: AttackType;
@@ -65,6 +66,10 @@ export class ScenarioScheduler {
     this.storagePath = storagePath;
   }
 
+  getStoragePath(): string | undefined {
+    return this.storagePath;
+  }
+
   async save(): Promise<void> {
     if (!this.storagePath) return;
     try {
@@ -82,7 +87,7 @@ export class ScenarioScheduler {
     const filePath = path.join(this.storagePath, this.fileName);
     try {
       const raw = await fs.promises.readFile(filePath, 'utf8');
-      const scenarios: Scenario[] = JSON.parse(raw);
+      const scenarios = parsePersistedArray(JSON.parse(raw), ScenarioSchema, this.fileName);
       for (const scenario of scenarios) {
         scenario.enabled = false;
         this.addScenario(scenario);
@@ -119,6 +124,7 @@ export class ScenarioScheduler {
     }
 
     this.scheduled.set(scenario.id, entry);
+    this.engine.notifyStateChanged();
   }
 
   removeScenario(id: string): void {
@@ -127,26 +133,33 @@ export class ScenarioScheduler {
       clearInterval(entry.intervalHandle);
     }
     this.scheduled.delete(id);
+    this.engine.notifyStateChanged();
   }
 
-  toggleScenario(id: string, enabled: boolean): void {
+  async toggleScenario(id: string, enabled: boolean): Promise<void> {
     const entry = this.scheduled.get(id);
     if (!entry) return;
 
-    entry.scenario.enabled = enabled;
+    if (!enabled) {
+      // Stopping a scenario reverts every attack it has caused so far, the same way
+      // "Stop All Chaos" reverts each affected container — otherwise the schedule would
+      // stop but containers would silently stay in whatever state the last attack left them.
+      await this.rollbackEntry(entry);
+      this.engine.notifyStateChanged();
+      return;
+    }
 
+    entry.scenario.enabled = true;
     if (entry.intervalHandle) {
       clearInterval(entry.intervalHandle);
-      entry.intervalHandle = undefined;
     }
+    entry.intervalHandle = setInterval(() => {
+      this.executeAttack(entry).catch((err: unknown) =>
+        console.error(`Scenario ${entry.scenario.name} attack failed:`, err),
+      );
+    }, entry.scenario.intervalSec * 1000);
 
-    if (enabled) {
-      entry.intervalHandle = setInterval(() => {
-        this.executeAttack(entry).catch((err: unknown) =>
-          console.error(`Scenario ${entry.scenario.name} attack failed:`, err),
-        );
-      }, entry.scenario.intervalSec * 1000);
-    }
+    this.engine.notifyStateChanged();
   }
 
   async runOnce(id: string): Promise<void> {
@@ -163,49 +176,53 @@ export class ScenarioScheduler {
 
   async rollbackAll(): Promise<void> {
     for (const entry of this.scheduled.values()) {
-      if (entry.intervalHandle) {
-        clearInterval(entry.intervalHandle);
-        entry.intervalHandle = undefined;
-      }
-      entry.scenario.enabled = false;
-
-      for (const [key, info] of entry.affectedContainers) {
-        const containerId = key.replace(/-(network|resources|disconnect|stress|config)$/, '');
-        try {
-          switch (info.attackType) {
-            case 'pause':
-              await this.containerService.unpauseContainer(containerId);
-              break;
-            case 'stop':
-            case 'kill':
-            case 'restart':
-              await this.containerService.startContainer(info.engineId, containerId);
-              break;
-            case 'network-shape':
-              await this.networkShaper.removeRule(containerId);
-              break;
-            case 'resource-limit':
-              await this.resourceLimiter.removeLimit(containerId);
-              break;
-            case 'network-disconnect':
-              break;
-            case 'stress':
-              if (this.stressInjector) {
-                await this.stressInjector.stop(containerId);
-              }
-              break;
-            case 'config-sabotage':
-              if (this.configSaboteur) {
-                await this.configSaboteur.restore(containerId);
-              }
-              break;
-          }
-        } catch (err: unknown) {
-          console.warn(`Failed to rollback container ${containerId} (${info.attackType}):`, err);
-        }
-      }
-      entry.affectedContainers.clear();
+      await this.rollbackEntry(entry);
     }
+  }
+
+  private async rollbackEntry(entry: ScheduledScenario): Promise<void> {
+    if (entry.intervalHandle) {
+      clearInterval(entry.intervalHandle);
+      entry.intervalHandle = undefined;
+    }
+    entry.scenario.enabled = false;
+
+    for (const [key, info] of entry.affectedContainers) {
+      const containerId = key.replace(/-(network|resources|disconnect|stress|config)$/, '');
+      try {
+        switch (info.attackType) {
+          case 'pause':
+            await this.containerService.unpauseContainer(containerId);
+            break;
+          case 'stop':
+          case 'kill':
+          case 'restart':
+            await this.containerService.startContainer(info.engineId, containerId);
+            break;
+          case 'network-shape':
+            await this.networkShaper.removeRule(containerId);
+            break;
+          case 'resource-limit':
+            await this.resourceLimiter.removeLimit(containerId);
+            break;
+          case 'network-disconnect':
+            break;
+          case 'stress':
+            if (this.stressInjector) {
+              await this.stressInjector.stop(containerId);
+            }
+            break;
+          case 'config-sabotage':
+            if (this.configSaboteur) {
+              await this.configSaboteur.restore(containerId);
+            }
+            break;
+        }
+      } catch (err: unknown) {
+        console.warn(`Failed to rollback container ${containerId} (${info.attackType}):`, err);
+      }
+    }
+    entry.affectedContainers.clear();
   }
 
   dispose(): void {

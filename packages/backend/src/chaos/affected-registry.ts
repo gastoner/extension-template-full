@@ -20,16 +20,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AffectedContainerState } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
+import { AffectedContainerStateSchema, parsePersistedArray } from './persistence-schemas';
 
 export class AffectedRegistry {
   private affected: Map<string, AffectedContainerState> = new Map();
   private storagePath: string | undefined;
   private readonly fileName = 'affected-containers.json';
+  private changeListeners: Array<() => void> = [];
 
   constructor(private readonly containerService: ContainerService) {}
 
   setStoragePath(storagePath: string): void {
     this.storagePath = storagePath;
+  }
+
+  /** Notified after every mutation (markAffected/removeAttack/clearContainer/clear) so callers can react without polling. */
+  onChanged(listener: () => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyChanged(): void {
+    for (const listener of this.changeListeners) {
+      listener();
+    }
   }
 
   async markAffected(containerId: string, attackType: string): Promise<void> {
@@ -39,6 +52,7 @@ export class AffectedRegistry {
         existing.activeAttacks.push(attackType);
       }
       await this.save();
+      this.notifyChanged();
       return;
     }
 
@@ -80,17 +94,21 @@ export class AffectedRegistry {
 
     this.affected.set(containerId, entry);
     await this.save();
+    this.notifyChanged();
   }
 
-  removeAttack(containerId: string, attackType: string): void {
+  async removeAttack(containerId: string, attackType: string): Promise<void> {
     const entry = this.affected.get(containerId);
     if (!entry) return;
     entry.activeAttacks = entry.activeAttacks.filter(a => a !== attackType);
+    await this.save();
+    this.notifyChanged();
   }
 
-  clearContainer(containerId: string): void {
+  async clearContainer(containerId: string): Promise<void> {
     this.affected.delete(containerId);
-    this.save().catch(() => {});
+    await this.save();
+    this.notifyChanged();
   }
 
   getAffected(): AffectedContainerState[] {
@@ -124,7 +142,7 @@ export class AffectedRegistry {
     const filePath = path.join(this.storagePath, this.fileName);
     try {
       const raw = await fs.promises.readFile(filePath, 'utf8');
-      const entries: AffectedContainerState[] = JSON.parse(raw);
+      const entries = parsePersistedArray(JSON.parse(raw), AffectedContainerStateSchema, this.fileName);
       this.affected.clear();
       for (const entry of entries) {
         this.affected.set(entry.containerId, entry);
@@ -134,8 +152,9 @@ export class AffectedRegistry {
     }
   }
 
-  clear(): void {
+  async clear(): Promise<void> {
     this.affected.clear();
-    this.save().catch(() => {});
+    await this.save();
+    this.notifyChanged();
   }
 }

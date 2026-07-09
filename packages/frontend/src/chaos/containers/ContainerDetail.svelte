@@ -1,11 +1,10 @@
 <script lang="ts">
 import { DetailsPage, StatusIcon, Spinner, Tooltip } from '@podman-desktop/ui-svelte';
 import { goto } from '$app/navigation';
-import { onMount } from 'svelte';
-import { chaosClient } from '../api/client';
-import type { ContainerHealth } from '/@shared/src/ChaosApi';
-import type { ContainerStats } from '/@shared/src/ContainerTypes';
-import UPlotChart from '../lib/UPlotChart.svelte';
+import * as chaos from '../../stores/chaos-store.svelte';
+import type { ContainerHealth } from '../../../../shared/src/ChaosApi';
+import type { ContainerStats } from '../../../../shared/src/ContainerTypes';
+import UPlotChart from '../../lib/UPlotChart.svelte';
 import type uPlot from 'uplot';
 
 const MAX_POINTS = 600;
@@ -16,10 +15,11 @@ interface Props {
 
 let { containerId }: Props = $props();
 
-let container: ContainerHealth | undefined = $state(undefined);
+let containers: ContainerHealth[] | undefined = $derived(await chaos.getContainerHealth());
+let container: ContainerHealth | undefined = $derived(containers?.find(c => c.id === containerId));
+
 let dataPoints: ContainerStats[] = $state([]);
 let latestStats: ContainerStats | undefined = $state(undefined);
-let loading = $state(true);
 let lastTimestamp = 0;
 
 function getComputedColor(varName: string): string {
@@ -104,49 +104,21 @@ let blockSeries: uPlot.Series[] = $derived([
   { label: 'Write', stroke: getComputedColor('--pd-button-tertiary-bg'), width: 2 },
 ]);
 
-async function loadInitial(): Promise<void> {
-  try {
-    const containers = await chaosClient.getContainerHealth();
-    container = containers.find(c => c.id === containerId);
-    if (container?.stats) {
-      latestStats = container.stats;
-      lastTimestamp = container.stats.timestamp;
-      dataPoints = [container.stats];
-    }
-  } catch (err) {
-    console.error('Failed to load container detail:', err);
-  } finally {
-    loading = false;
-  }
-}
+$effect(() => {
+  const stats = container?.stats;
+  if (!stats || stats.timestamp <= lastTimestamp) return;
 
-async function pollLatest(): Promise<void> {
-  try {
-    const containers = await chaosClient.getContainerHealth();
-    container = containers.find(c => c.id === containerId);
-    const newStats = container?.stats;
-
-    if (newStats && newStats.timestamp > lastTimestamp) {
-      lastTimestamp = newStats.timestamp;
-      latestStats = newStats;
-      const updated =
-        dataPoints.length >= MAX_POINTS
-          ? [...dataPoints.slice(dataPoints.length - MAX_POINTS + 1), newStats]
-          : [...dataPoints, newStats];
-      dataPoints = updated;
-    }
-  } catch (err) {
-    console.error('Failed to poll container stats:', err);
-  }
-}
+  lastTimestamp = stats.timestamp;
+  latestStats = stats;
+  dataPoints = dataPoints.length >= MAX_POINTS ? [...dataPoints.slice(1), stats] : [...dataPoints, stats];
+});
 
 function goBack(): void {
   goto('/chaos');
 }
 
-onMount(() => {
-  loadInitial();
-  const interval = setInterval(pollLatest, 3000);
+$effect(() => {
+  const interval = setInterval(() => chaos.refresh(), 3000);
   return () => clearInterval(interval);
 });
 </script>
@@ -186,7 +158,7 @@ onMount(() => {
   {/snippet}
 
   {#snippet contentSnippet()}
-    {#if loading}
+    {#if !containers}
       <div class="flex items-center justify-center h-full">
         <Spinner size="3em" />
       </div>
@@ -198,31 +170,31 @@ onMount(() => {
       <div class="flex flex-col gap-4 p-5 overflow-auto h-full">
         <div class="grid grid-cols-5 gap-3">
           <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
-            <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Status</div>
+            <div class="text-xs text-[var(--pd-content-text)] uppercase">Status</div>
             <div class="text-sm font-bold text-[var(--pd-content-header)]">{container.state}</div>
           </div>
           {#if latestStats}
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
-              <div class="text-[10px] text-[var(--pd-content-text)] uppercase">CPU</div>
+              <div class="text-xs text-[var(--pd-content-text)] uppercase">CPU</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
                 {(latestStats.cpuPercent / 100).toFixed(2)}{#if latestStats.cpuLimitPercent > 0}
                   / {(latestStats.cpuLimitPercent / 100).toFixed(1)}{/if} vCPU
               </div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
-              <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Memory</div>
+              <div class="text-xs text-[var(--pd-content-text)] uppercase">Memory</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
                 {formatMb(latestStats.memoryUsageMb)} / {formatMb(latestStats.memoryLimitMb)}
               </div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
-              <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Net I/O</div>
+              <div class="text-xs text-[var(--pd-content-text)] uppercase">Net I/O</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
                 {formatMb(latestStats.netRxMb)} / {formatMb(latestStats.netTxMb)}
               </div>
             </div>
             <div class="rounded-lg bg-[var(--pd-content-card-bg)] p-3 text-center">
-              <div class="text-[10px] text-[var(--pd-content-text)] uppercase">Block I/O</div>
+              <div class="text-xs text-[var(--pd-content-text)] uppercase">Block I/O</div>
               <div class="text-sm font-bold text-[var(--pd-content-header)]">
                 {formatMb(latestStats.blockReadMb)} / {formatMb(latestStats.blockWriteMb)}
               </div>

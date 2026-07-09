@@ -21,6 +21,11 @@ function getComputedColor(varName: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#888';
 }
 
+function formatTime(v: number): string {
+  const d = new Date(v * 1000);
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+}
+
 function buildOpts(): uPlot.Options {
   const gridColor = getComputedColor('--pd-content-divider') || 'rgba(128,128,128,0.15)';
   const textColor = getComputedColor('--pd-content-text') || '#aaa';
@@ -35,11 +40,7 @@ function buildOpts(): uPlot.Options {
         stroke: textColor,
         grid: { stroke: gridColor, width: 1 },
         ticks: { stroke: gridColor, width: 1 },
-        values: (_u: uPlot, vals: number[]) =>
-          vals.map(v => {
-            const d = new Date(v * 1000);
-            return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-          }),
+        values: (_u: uPlot, vals: number[]) => vals.map(formatTime),
       },
       {
         stroke: textColor,
@@ -49,7 +50,10 @@ function buildOpts(): uPlot.Options {
         ...(yFormatter ? { values: (_u: uPlot, vals: number[]) => vals.map(yFormatter) } : {}),
       },
     ],
-    series: [{}, ...series],
+    // The x-series' legend value defaults to uPlot's full date+time stamp (e.g. "2026-07-09
+    // 8:54am"); override it to match the axis ticks above, since the charted window is always
+    // recent enough that only the time-of-day is useful.
+    series: [{ value: (_u: uPlot, rawValue: number) => formatTime(rawValue) }, ...series],
   };
 }
 

@@ -24,10 +24,8 @@ import { ContainerService } from './container-service';
 import { ChaosEngine } from './chaos/chaos-engine';
 import { ChaosApiImpl } from './chaos/chaos-api-impl';
 import { SettingsManager } from './settings-manager';
-import { registerChaosProvider, disposeChaosProvider } from './chaos-provider';
 
 let chaosEngine: ChaosEngine | undefined;
-let statusBarUpdateInterval: ReturnType<typeof setInterval> | undefined;
 
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   console.log('Starting Chaos Lab extension');
@@ -44,10 +42,9 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   chaosEngine.setSafePatterns(settings.chaosSafeContainers);
 
   const storagePath = extensionContext.storagePath;
-  chaosEngine.affectedRegistry.setStoragePath(storagePath);
-  chaosEngine.scheduler.setStoragePath(storagePath);
-  await chaosEngine.affectedRegistry.load();
-  await chaosEngine.scheduler.load();
+  chaosEngine.setStoragePath(storagePath);
+  chaosEngine.setSecretStorage(extensionContext.secrets);
+  await chaosEngine.loadPersistedState();
 
   extensionContext.subscriptions.push({ dispose: () => chaosEngine?.dispose() });
 
@@ -89,15 +86,23 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     });
   }
 
-  const fontUrls = indexHtml.match(/url\((\/[^)]+\.woff2?)\)/g);
+  const fontUrls = indexHtml.match(/url\(([^)]+\.(?:woff2?|ttf))\)/g);
   if (fontUrls) {
+    const seen = new Set<string>();
     fontUrls.forEach(match => {
-      const urlPath = match.match(/url\((\/[^)]+)\)/);
-      if (urlPath) {
+      const urlPath = match.match(/url\(([^)]+)\)/);
+      if (urlPath && !seen.has(urlPath[1])) {
+        seen.add(urlPath[1]);
+        let fontPath = urlPath[1];
+        if (fontPath.startsWith('./')) {
+          fontPath = `_app/immutable/assets/${fontPath.slice(2)}`;
+        } else if (fontPath.startsWith('/')) {
+          fontPath = fontPath.slice(1);
+        }
         const webviewUri = panel.webview.asWebviewUri(
-          extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', urlPath[1]),
+          extensionApi.Uri.joinPath(extensionContext.extensionUri, 'media', fontPath),
         );
-        indexHtml = indexHtml.replace(urlPath[1], webviewUri.toString());
+        indexHtml = indexHtml.replaceAll(urlPath[1], webviewUri.toString());
       }
     });
   }
@@ -128,7 +133,7 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
   }
   extensionContext.subscriptions.push(chaosStatusBar);
 
-  statusBarUpdateInterval = setInterval(() => {
+  const updateStatusBar = (): void => {
     const state = chaosEngine?.getState();
     if (!state) {
       chaosStatusBar.text = 'Chaos Lab';
@@ -136,24 +141,20 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     }
 
     const parts: string[] = [];
-    if (state.chaosModeActive) parts.push('CHAOS MODE');
     if (state.runningAttacks > 0) parts.push(`${state.runningAttacks} active`);
     if (state.killCount > 0) parts.push(`${state.killCount} killed`);
 
     chaosStatusBar.text = parts.length > 0 ? `Chaos Lab (${parts.join(' | ')})` : 'Chaos Lab';
-  }, 3000);
-  extensionContext.subscriptions.push({
-    dispose: () => {
-      if (statusBarUpdateInterval) {
-        clearInterval(statusBarUpdateInterval);
-        statusBarUpdateInterval = undefined;
-      }
-    },
-  });
+  };
+
+  // Reflects the persisted state loaded above, then stays in sync via the chaos
+  // engine's change event instead of polling on a timer.
+  updateStatusBar();
+  chaosEngine.onStateChanged(updateStatusBar);
 
   const stopAllCommand = extensionApi.commands.registerCommand('chaos-lab.stopAll', async () => {
-    await chaosApiImpl.stopAllChaos();
-    void extensionApi.window.showInformationMessage('All chaos operations have been stopped and rolled back.');
+    // revertAllContainers() already notifies the user (via ChaosApiImpl.notify) once done.
+    await chaosApiImpl.revertAllContainers();
   });
   extensionContext.subscriptions.push(stopAllCommand);
 
@@ -278,31 +279,16 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     submenu: [
       { id: 'chaos-lab.openChaos', label: 'Open Dashboard', type: 'normal' },
       { id: 'chaos-lab.stopAll', label: 'Stop All Chaos', type: 'normal' },
-      { id: 'chaos-lab.toggleChaosMode', label: 'Toggle Chaos Mode', type: 'normal' },
     ],
   });
   extensionContext.subscriptions.push(trayItem);
-
-  const toggleChaosModeCommand = extensionApi.commands.registerCommand('chaos-lab.toggleChaosMode', async () => {
-    if (chaosEngine?.chaosModeActive) {
-      await chaosApiImpl.disableChaosMode();
-    } else {
-      await chaosApiImpl.enableChaosMode(30);
-    }
-  });
-  extensionContext.subscriptions.push(toggleChaosModeCommand);
-
-  registerChaosProvider(extensionContext);
 
   console.log('Chaos Lab extension activated');
 }
 
 export async function deactivate(): Promise<void> {
   console.log('Stopping Chaos Lab extension');
-  if (statusBarUpdateInterval) {
-    clearInterval(statusBarUpdateInterval);
-    statusBarUpdateInterval = undefined;
-  }
-  await chaosEngine?.stopAll();
-  disposeChaosProvider();
+  // Intentionally does not roll back active chaos effects: they are persisted to disk and
+  // reloaded by loadPersistedState() on the next activation, so containers stay in whatever
+  // state the user put them in. Use "Stop All Chaos" / per-attack "Restore" to revert explicitly.
 }

@@ -1,9 +1,9 @@
 <script lang="ts">
 import { Button, Dropdown, Input, ErrorMessage, Tooltip, Expandable } from '@podman-desktop/ui-svelte';
 import { faBiohazard } from '@fortawesome/free-solid-svg-icons';
-import * as chaos from '../api/chaos-store.svelte';
+import * as chaos from '../stores/chaos-store.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
-import type { ContainerHealth, ConfigSabotage, SabotageType } from '/@shared/src/ChaosApi';
+import type { ContainerHealth, ConfigSabotage, SabotageType } from '../../../shared/src/ChaosApi';
 
 let containers: ContainerHealth[] = $derived(await chaos.getContainerHealth());
 let activeSabotages: ConfigSabotage[] = $derived(await chaos.listConfigSabotages());
@@ -92,7 +92,7 @@ function formatElapsed(startedAt: number): string {
             {/if}
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target Container</span>
               <Dropdown
                 bind:value={selectedContainer}
                 options={containerOptions}
@@ -101,13 +101,13 @@ function formatElapsed(startedAt: number): string {
             </div>
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Sabotage Type</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Sabotage Type</span>
               <Dropdown bind:value={sabotageType} options={sabotageTypeOptions} ariaLabel="Sabotage type" />
             </div>
 
             {#if sabotageType === 'file-corrupt'}
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target File Path</span>
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target File Path</span>
                 <Input bind:value={targetFile} placeholder="/etc/hostname" aria-label="Target file" />
               </div>
             {/if}
@@ -120,17 +120,15 @@ function formatElapsed(startedAt: number): string {
               {/if}
             </div>
 
-            <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
-              <Button type="danger" class="w-full" onclick={corrupt} icon={faBiohazard}>Apply Sabotage</Button>
-            </div>
+            <Button type="danger" class="w-full" onclick={corrupt} icon={faBiohazard}>Apply Sabotage</Button>
 
             {#if activeSabotages.length > 0}
               <div class="pt-4">
                 <h2 class="text-xl pt-2 grow mb-3">Active Sabotages</h2>
-                <div class="space-y-2">
+                <div class="space-y-1.5">
                   {#each activeSabotages as sabotage}
                     <div
-                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] border border-[var(--pd-status-degraded)] p-2.5 transition-colors">
                       <div class="flex items-center gap-4 text-sm">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {sabotage.containerName}
@@ -141,11 +139,9 @@ function formatElapsed(startedAt: number): string {
                             {sabotage.type}
                           </span>
                         </Tooltip>
-                        {#if sabotage.targetFile}
-                          <span class="text-xs text-[var(--pd-content-text)] font-mono">
-                            {sabotage.targetFile}
-                          </span>
-                        {/if}
+                        <span class="text-xs text-[var(--pd-content-text)] font-mono">
+                          {sabotage.targetFile}
+                        </span>
                         <span class="text-xs text-[var(--pd-content-text)]">
                           {formatElapsed(sabotage.startedAt)}
                         </span>

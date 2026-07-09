@@ -1,4 +1,4 @@
-import { chaosClient } from './client';
+import { chaosClient } from '../api/client';
 import type {
   AffectedContainerState,
   ChaosState,
@@ -11,12 +11,16 @@ import type {
   ResourceLimit,
   StressType,
   SabotageType,
-} from '/@shared/src/ChaosApi';
+} from '../../../shared/src/ChaosApi';
 
 let version = $state(0);
 
 function invalidate(): void {
   version++;
+}
+
+export function refresh(): void {
+  invalidate();
 }
 
 // Read methods — access `version` to create a reactive dependency
@@ -84,6 +88,15 @@ export async function toggleScenario(id: string, enabled: boolean): Promise<void
   invalidate();
 }
 
+export async function exportScenarios(ids?: string[]): Promise<void> {
+  await chaosClient.exportScenarios(ids);
+}
+
+export async function importScenarios(): Promise<void> {
+  await chaosClient.importScenarios();
+  invalidate();
+}
+
 export async function applyNetworkRule(rule: NetworkRule): Promise<void> {
   await chaosClient.applyNetworkRule(rule);
   invalidate();
@@ -139,18 +152,12 @@ export async function restoreConfig(containerId: string): Promise<void> {
   invalidate();
 }
 
-export async function enableChaosMode(intervalSec: number): Promise<void> {
-  await chaosClient.enableChaosMode(intervalSec);
-  invalidate();
+export async function detectPackageManagers(containerId: string): Promise<string[]> {
+  return chaosClient.detectPackageManagers(containerId);
 }
 
-export async function disableChaosMode(): Promise<void> {
-  await chaosClient.disableChaosMode();
-  invalidate();
-}
-
-export async function installContainerTool(containerId: string, tool: string): Promise<void> {
-  await chaosClient.installContainerTool(containerId, tool);
+export async function installContainerTool(containerId: string, tool: string, packageManager: string): Promise<void> {
+  await chaosClient.installContainerTool(containerId, tool, packageManager);
   invalidate();
 }
 

@@ -16,16 +16,21 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import fs from 'node:fs';
+import path from 'node:path';
 import * as extensionApi from '@podman-desktop/api';
 import type { IsolationRule } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { AffectedRegistry } from './affected-registry';
+import { IsolationRuleSchema, parsePersistedArray } from './persistence-schemas';
 
 export class ContainerIsolator {
   private isolations: Map<string, IsolationRule> = new Map();
   private autoRestoreTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private safePatterns: RegExp[] = [];
   private registry: AffectedRegistry | undefined;
+  private storagePath: string | undefined;
+  private readonly fileName = 'isolations.json';
 
   private async execIptables(containerId: string, args: string[]): Promise<void> {
     const joinedArgs = args.join(' ');
@@ -56,6 +61,61 @@ export class ContainerIsolator {
     this.registry = registry;
   }
 
+  setStoragePath(storagePath: string): void {
+    this.storagePath = storagePath;
+  }
+
+  async save(): Promise<void> {
+    if (!this.storagePath) return;
+    try {
+      await fs.promises.mkdir(this.storagePath, { recursive: true });
+      const filePath = path.join(this.storagePath, this.fileName);
+      const data = JSON.stringify(Array.from(this.isolations.values()), undefined, 2);
+      await fs.promises.writeFile(filePath, data, 'utf8');
+    } catch (err) {
+      console.warn('Failed to save isolations:', err);
+    }
+  }
+
+  async load(): Promise<void> {
+    if (!this.storagePath) return;
+    const filePath = path.join(this.storagePath, this.fileName);
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const rules = parsePersistedArray(JSON.parse(raw), IsolationRuleSchema, this.fileName);
+      this.isolations.clear();
+      for (const rule of rules) {
+        this.isolations.set(rule.containerId, rule);
+        await this.scheduleAutoRestore(rule);
+      }
+    } catch {
+      // file doesn't exist or is malformed — start fresh
+    }
+  }
+
+  private async scheduleAutoRestore(rule: IsolationRule): Promise<void> {
+    if (!rule.autoRestoreAfterSec || rule.autoRestoreAfterSec <= 0) return;
+
+    const elapsedMs = Date.now() - rule.startedAt;
+    const remainingMs = rule.autoRestoreAfterSec * 1000 - elapsedMs;
+
+    if (remainingMs <= 0) {
+      // The auto-restore deadline already passed while the extension was inactive
+      // (e.g. across a restart) — catch up immediately instead of scheduling.
+      await this.restore(rule.containerId).catch((err: unknown) =>
+        console.warn(`Auto-restore failed for ${rule.containerName}:`, err),
+      );
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.restore(rule.containerId).catch((err: unknown) =>
+        console.warn(`Auto-restore failed for ${rule.containerName}:`, err),
+      );
+    }, remainingMs);
+    this.autoRestoreTimers.set(rule.containerId, timer);
+  }
+
   setSafePatterns(patterns: string[]): void {
     this.safePatterns = patterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
   }
@@ -80,8 +140,6 @@ export class ContainerIsolator {
     if (this.isolations.has(rule.containerId)) {
       await this.restore(rule.containerId);
     }
-
-    await this.registry?.markAffected(rule.containerId, `isolation-${rule.mode}`);
 
     rule.startedAt = Date.now();
 
@@ -126,15 +184,12 @@ export class ContainerIsolator {
     }
 
     this.isolations.set(rule.containerId, rule);
-
-    if (rule.autoRestoreAfterSec && rule.autoRestoreAfterSec > 0) {
-      const timer = setTimeout(() => {
-        this.restore(rule.containerId).catch((err: unknown) =>
-          console.warn(`Auto-restore failed for ${rule.containerName}:`, err),
-        );
-      }, rule.autoRestoreAfterSec * 1000);
-      this.autoRestoreTimers.set(rule.containerId, timer);
-    }
+    await this.save();
+    // Marked as affected only now that isolation actually succeeded and is tracked in-memory —
+    // otherwise a failure above (e.g. missing iptables) would leave a phantom entry in the
+    // registry that the dashboard shows but no subsystem can revert.
+    await this.registry?.markAffected(rule.containerId, `isolation-${rule.mode}`);
+    await this.scheduleAutoRestore(rule);
 
     console.log(`Isolated ${rule.containerName} (mode: ${rule.mode})`);
   }
@@ -188,7 +243,8 @@ export class ContainerIsolator {
     }
 
     this.isolations.delete(containerId);
-    this.registry?.removeAttack(containerId, `isolation-${rule.mode}`);
+    await this.save();
+    await this.registry?.removeAttack(containerId, `isolation-${rule.mode}`);
     console.log(`Restored ${rule.containerName} from isolation`);
   }
 

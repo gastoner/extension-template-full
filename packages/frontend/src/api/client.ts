@@ -1,5 +1,5 @@
-import type { ChaosApi } from '/@shared/src/ChaosApi';
-import { RpcBrowser } from '/@shared/src/messages/MessageProxy';
+import type { ChaosApi } from '../../../shared/src/ChaosApi';
+import { RpcBrowser } from '../../../shared/src/messages/MessageProxy';
 import { browser } from '$app/environment';
 
 export interface RouterState {

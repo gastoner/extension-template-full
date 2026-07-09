@@ -1,10 +1,10 @@
 <script lang="ts">
 import { Button, Dropdown, Tooltip, ErrorMessage, Expandable } from '@podman-desktop/ui-svelte';
 import { faTachometerAlt } from '@fortawesome/free-solid-svg-icons';
-import * as chaos from '../api/chaos-store.svelte';
+import * as chaos from '../stores/chaos-store.svelte';
 import SliderNumberInput from '../lib/SliderNumberInput.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
-import type { ChaosState, ContainerHealth, ResourceLimit } from '/@shared/src/ChaosApi';
+import type { ChaosState, ContainerHealth, ResourceLimit } from '../../../shared/src/ChaosApi';
 
 let containers: ContainerHealth[] = $derived(await chaos.getContainerHealth());
 let chaosState: ChaosState | undefined = $derived(await chaos.getChaosState());
@@ -84,7 +84,7 @@ async function removeLimit(containerId: string): Promise<void> {
             {/if}
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target Container</span>
               <Dropdown
                 bind:value={selectedContainer}
                 options={containerOptions}
@@ -94,19 +94,19 @@ async function removeLimit(containerId: string): Promise<void> {
 
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]"
                   >CPU Cores Limit ({(cpuPercent / 100).toFixed(2)} cores)</span>
                 <SliderNumberInput bind:value={cpuPercent} minimum={1} maximum={1600} step={1} label="CPU percent" />
               </div>
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Memory Limit (MB)</span>
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Memory Limit (MB)</span>
                 <SliderNumberInput bind:value={memoryMb} minimum={16} maximum={8192} step={16} label="Memory MB" />
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]"
                   >Disk Read Limit (KB/s, 0 = no limit)</span>
                 <SliderNumberInput
                   bind:value={deviceReadBpsKB}
@@ -116,7 +116,7 @@ async function removeLimit(containerId: string): Promise<void> {
                   label="Disk read KB/s" />
               </div>
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1"
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]"
                   >Disk Write Limit (KB/s, 0 = no limit)</span>
                 <SliderNumberInput
                   bind:value={deviceWriteBpsKB}
@@ -127,17 +127,15 @@ async function removeLimit(containerId: string): Promise<void> {
               </div>
             </div>
 
-            <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
-              <Button class="w-full" onclick={applyLimit} icon={faTachometerAlt}>Apply Resource Limit</Button>
-            </div>
+            <Button class="w-full" onclick={applyLimit} icon={faTachometerAlt}>Apply Resource Limit</Button>
 
             {#if Object.keys(activeLimits).length > 0}
               <div class="pt-4">
                 <h2 class="text-xl pt-2 grow mb-3">Active Limits</h2>
-                <div class="space-y-2">
+                <div class="space-y-1.5">
                   {#each Object.entries(activeLimits) as [containerId, limit]}
                     <div
-                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] border border-[var(--pd-status-degraded)] p-2.5 transition-colors">
                       <div class="flex items-center gap-4 text-sm flex-wrap">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12)}

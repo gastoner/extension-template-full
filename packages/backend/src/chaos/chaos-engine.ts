@@ -16,6 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type * as extensionApi from '@podman-desktop/api';
 import type { ChaosState } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import { ScenarioScheduler } from './scenario-scheduler';
@@ -36,9 +37,8 @@ export class ChaosEngine {
   readonly affectedRegistry: AffectedRegistry;
 
   private _killCount = 0;
-  private _chaosModeActive = false;
-  private chaosModeInterval?: ReturnType<typeof setInterval>;
   private safePatterns: string[] = [];
+  private stateChangeListeners: Array<() => void> = [];
 
   constructor(private readonly containerService: ContainerService) {
     this.affectedRegistry = new AffectedRegistry(containerService);
@@ -56,6 +56,10 @@ export class ChaosEngine {
     this.configSaboteur.setRegistry(this.affectedRegistry);
     this.scheduler.setStressInjector(this.stressInjector);
     this.scheduler.setConfigSaboteur(this.configSaboteur);
+
+    // The registry is touched by every subsystem on every attack apply/remove, so
+    // forwarding its change notifications here covers all attack types with one hook.
+    this.affectedRegistry.onChanged(() => this.notifyStateChanged());
   }
 
   get killCount(): number {
@@ -64,10 +68,18 @@ export class ChaosEngine {
 
   incrementKillCount(): void {
     this._killCount++;
+    this.notifyStateChanged();
   }
 
-  get chaosModeActive(): boolean {
-    return this._chaosModeActive;
+  /** Notified whenever getState() output may have changed (attacks, scenarios, kill count). */
+  onStateChanged(listener: () => void): void {
+    this.stateChangeListeners.push(listener);
+  }
+
+  notifyStateChanged(): void {
+    for (const listener of this.stateChangeListeners) {
+      listener();
+    }
   }
 
   setSafePatterns(patterns: string[]): void {
@@ -80,42 +92,33 @@ export class ChaosEngine {
     this.configSaboteur.setSafePatterns(patterns);
   }
 
-  async enableChaosMode(intervalSec: number): Promise<void> {
-    this.disableChaosMode();
-    this._chaosModeActive = true;
-
-    const safeRegexes = this.safePatterns.filter(Boolean).map(p => new RegExp('^' + p.replace(/\*/g, '.*') + '$', 'i'));
-
-    this.chaosModeInterval = setInterval(() => {
-      void (async () => {
-        try {
-          const containers = await this.containerService.listContainers();
-          const running = containers.filter(c => c.state === 'running' && !safeRegexes.some(r => r.test(c.name)));
-          if (running.length === 0) return;
-
-          const victim = running[Math.floor(Math.random() * running.length)];
-          await this.containerService.killContainer(victim.id);
-          this._killCount++;
-          console.log(`Chaos Mode: killed container ${victim.name}`);
-        } catch (err) {
-          console.warn('Chaos Mode kill failed:', err);
-        }
-      })();
-    }, intervalSec * 1000);
+  setStoragePath(storagePath: string): void {
+    this.affectedRegistry.setStoragePath(storagePath);
+    this.scheduler.setStoragePath(storagePath);
+    this.networkShaper.setStoragePath(storagePath);
+    this.resourceLimiter.setStoragePath(storagePath);
+    this.isolator.setStoragePath(storagePath);
+    this.stressInjector.setStoragePath(storagePath);
+    this.configSaboteur.setStoragePath(storagePath);
   }
 
-  disableChaosMode(): void {
-    this._chaosModeActive = false;
-    if (this.chaosModeInterval) {
-      clearInterval(this.chaosModeInterval);
-      this.chaosModeInterval = undefined;
-    }
+  setSecretStorage(secrets: extensionApi.SecretStorage): void {
+    this.configSaboteur.setSecretStorage(secrets);
+  }
+
+  async loadPersistedState(): Promise<void> {
+    await this.affectedRegistry.load();
+    await this.scheduler.load();
+    await this.networkShaper.load();
+    await this.resourceLimiter.load();
+    await this.isolator.load();
+    await this.stressInjector.load();
+    await this.configSaboteur.load();
   }
 
   async stopAll(): Promise<void> {
     console.log('Stopping all chaos operations and rolling back');
 
-    this.disableChaosMode();
     await this.scheduler.rollbackAll();
     await this.networkShaper.rollbackAll();
     await this.resourceLimiter.rollbackAll();
@@ -146,7 +149,6 @@ export class ChaosEngine {
     return {
       runningAttacks,
       killCount: this._killCount,
-      chaosModeActive: this._chaosModeActive,
       scenarios,
       networkRules,
       resourceLimits,
@@ -157,12 +159,12 @@ export class ChaosEngine {
   }
 
   dispose(): void {
-    this.disableChaosMode();
     this.scheduler.dispose();
     this.networkShaper.dispose();
     this.resourceLimiter.dispose();
     this.isolator.dispose();
     this.stressInjector.dispose();
     this.configSaboteur.dispose();
+    this.stateChangeListeners = [];
   }
 }

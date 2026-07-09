@@ -16,9 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { SettingsManager } from './settings-manager';
-import { DEFAULT_SETTINGS } from '/@shared/src/SettingsApi';
 
 const mockGet = vi.fn();
 const mockGetConfiguration = vi.fn();
@@ -44,26 +43,26 @@ describe('SettingsManager', () => {
     manager.load();
   });
 
-  it('should return default settings when no config is set', () => {
+  test('should return default settings when no config is set', () => {
     const settings = manager.getSettings();
     expect(settings.chaosSafeContainers).toEqual([]);
     expect(settings.showStatusBarChaos).toBe(true);
   });
 
-  it('should return a copy of settings (not a reference)', () => {
+  test('should return a copy of settings (not a reference)', () => {
     const s1 = manager.getSettings();
     const s2 = manager.getSettings();
     expect(s1).not.toBe(s2);
     expect(s1).toEqual(s2);
   });
 
-  it('should register change listeners', () => {
+  test('should register change listeners', () => {
     const listener = vi.fn();
     manager.onSettingsChanged(listener);
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('should dispose cleanly', () => {
+  test('should dispose cleanly', () => {
     manager.dispose();
   });
 });

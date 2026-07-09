@@ -23,7 +23,7 @@ const config = {
     },
     typescript: {
       config: tsconfig => {
-        tsconfig['include'] = [...tsconfig['include'], '../../../types/**/*.d.ts'];
+        tsconfig['include'] = [...tsconfig['include'], '../../../types/**/*.d.ts', '../vitest.config.ts'];
         return tsconfig;
       },
     },

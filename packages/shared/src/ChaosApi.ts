@@ -84,7 +84,7 @@ export interface ConfigSabotage {
   containerId: string;
   containerName: string;
   type: SabotageType;
-  targetFile?: string;
+  targetFile: string;
   startedAt: number;
 }
 
@@ -134,7 +134,6 @@ export interface AffectedContainerState {
 export interface ChaosState {
   runningAttacks: number;
   killCount: number;
-  chaosModeActive: boolean;
   scenarios: Scenario[];
   networkRules: Record<string, NetworkRule>;
   resourceLimits: Record<string, ResourceLimit>;
@@ -152,6 +151,12 @@ export abstract class ChaosApi {
   abstract deleteScenario(id: string): Promise<void>;
   abstract listScenarios(): Promise<Scenario[]>;
   abstract toggleScenario(id: string, enabled: boolean): Promise<void>;
+  /**
+   * Exports scenarios to a JSON file chosen by the user. When `ids` is omitted, every
+   * scenario is exported; otherwise only the scenarios matching the given ids are.
+   */
+  abstract exportScenarios(ids?: string[]): Promise<void>;
+  abstract importScenarios(): Promise<void>;
 
   abstract applyNetworkRule(rule: NetworkRule): Promise<void>;
   abstract removeNetworkRule(containerId: string): Promise<void>;
@@ -165,7 +170,8 @@ export abstract class ChaosApi {
   abstract getContainerNetworks(containerId: string): Promise<string[]>;
 
   abstract checkContainerTool(containerId: string, tool: string): Promise<boolean>;
-  abstract installContainerTool(containerId: string, tool: string): Promise<void>;
+  abstract detectPackageManagers(containerId: string): Promise<string[]>;
+  abstract installContainerTool(containerId: string, tool: string, packageManager: string): Promise<void>;
 
   abstract injectStress(containerId: string, type: StressType, workers?: number, targetMb?: number): Promise<void>;
   abstract stopStress(containerId: string): Promise<void>;
@@ -174,9 +180,6 @@ export abstract class ChaosApi {
   abstract corruptConfig(containerId: string, type: SabotageType, targetFile?: string): Promise<void>;
   abstract restoreConfig(containerId: string): Promise<void>;
   abstract listConfigSabotages(): Promise<ConfigSabotage[]>;
-
-  abstract enableChaosMode(intervalSec: number): Promise<void>;
-  abstract disableChaosMode(): Promise<void>;
 
   abstract runScenarioOnce(id: string): Promise<void>;
 

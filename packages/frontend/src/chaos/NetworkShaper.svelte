@@ -1,10 +1,10 @@
 <script lang="ts">
 import { Button, Dropdown, Tooltip, Input, ErrorMessage, Expandable } from '@podman-desktop/ui-svelte';
 import { faNetworkWired } from '@fortawesome/free-solid-svg-icons';
-import * as chaos from '../api/chaos-store.svelte';
+import * as chaos from '../stores/chaos-store.svelte';
 import SliderNumberInput from '../lib/SliderNumberInput.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
-import type { ChaosState, ContainerHealth, NetworkRule } from '/@shared/src/ChaosApi';
+import type { ChaosState, ContainerHealth, NetworkRule } from '../../../shared/src/ChaosApi';
 
 let containers: ContainerHealth[] = $derived(await chaos.getContainerHealth());
 let chaosState: ChaosState | undefined = $derived(await chaos.getChaosState());
@@ -22,6 +22,11 @@ let tcAvailable: boolean | undefined = $derived(
   selectedContainer ? await chaos.checkContainerTool(selectedContainer, 'tc') : undefined,
 );
 
+let packageManagers: string[] = $derived(
+  selectedContainer && tcAvailable === false ? await chaos.detectPackageManagers(selectedContainer) : [],
+);
+let selectedPm = $state('');
+
 let runningContainers = $derived(containers.filter(c => c.state === 'running'));
 let containerOptions = $derived(
   runningContainers.length > 0
@@ -31,11 +36,11 @@ let containerOptions = $derived(
 let noRunning = $derived(runningContainers.length === 0);
 
 async function installTc(): Promise<void> {
-  if (!selectedContainer) return;
+  if (!selectedContainer || !selectedPm) return;
   try {
     installing = true;
     errorMessage = '';
-    await chaos.installContainerTool(selectedContainer, 'tc');
+    await chaos.installContainerTool(selectedContainer, 'tc', selectedPm);
   } catch (err) {
     errorMessage = `Failed to install tc: ${err instanceof Error ? err.message : String(err)}`;
   } finally {
@@ -113,7 +118,7 @@ async function removeRule(containerId: string): Promise<void> {
             {/if}
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target Container</span>
               <Dropdown
                 bind:value={selectedContainer}
                 options={containerOptions}
@@ -125,19 +130,27 @@ async function removeRule(containerId: string): Promise<void> {
               <div
                 class="flex items-center justify-between rounded-lg bg-[var(--pd-status-starting)] text-[var(--pd-status-contrast)] p-3 text-sm">
                 <span>Container is missing <strong>tc</strong> (iproute2), required for network shaping.</span>
-                <Button type="secondary" onclick={installTc} disabled={installing}>
-                  {installing ? 'Installing...' : 'Install tc'}
-                </Button>
+                <div class="flex items-center gap-2">
+                  {#if packageManagers.length > 0}
+                    <Dropdown
+                      bind:value={selectedPm}
+                      options={packageManagers.map(pm => ({ value: pm, label: pm }))}
+                      ariaLabel="Package manager" />
+                  {/if}
+                  <Button type="secondary" onclick={installTc} disabled={installing || !selectedPm}>
+                    {installing ? 'Installing...' : 'Install tc'}
+                  </Button>
+                </div>
               </div>
             {/if}
 
-            <div class="grid grid-cols-3 gap-6">
+            <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Latency (ms)</span>
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Latency (ms)</span>
                 <SliderNumberInput bind:value={latencyMs} minimum={0} maximum={5000} step={50} label="Latency ms" />
               </div>
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Packet Loss (%)</span>
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Packet Loss (%)</span>
                 <SliderNumberInput
                   bind:value={packetLossPercent}
                   minimum={0}
@@ -145,8 +158,11 @@ async function removeRule(containerId: string): Promise<void> {
                   step={1}
                   label="Packet loss percent" />
               </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6">
               <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Bandwidth (kbps)</span>
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Bandwidth (kbps)</span>
                 <SliderNumberInput
                   bind:value={bandwidthKbps}
                   minimum={10}
@@ -157,21 +173,20 @@ async function removeRule(containerId: string): Promise<void> {
             </div>
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">DNS Block (comma-separated)</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]"
+                >DNS Block (comma-separated)</span>
               <Input bind:value={dnsBlockInput} placeholder="api.example.com, cdn.example.com" aria-label="DNS block" />
             </div>
 
-            <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
-              <Button class="w-full" onclick={applyRule} icon={faNetworkWired}>Apply Network Rule</Button>
-            </div>
+            <Button class="w-full" onclick={applyRule} icon={faNetworkWired}>Apply Network Rule</Button>
 
             {#if Object.keys(activeRules).length > 0}
               <div class="pt-4">
                 <h2 class="text-xl pt-2 grow mb-3">Active Rules</h2>
-                <div class="space-y-2">
+                <div class="space-y-1.5">
                   {#each Object.entries(activeRules) as [containerId, rule]}
                     <div
-                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] border border-[var(--pd-status-degraded)] p-2.5 transition-colors">
                       <div class="text-sm text-[var(--pd-content-text)]">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {containers.find(c => c.id === containerId)?.name ?? containerId.substring(0, 12)}

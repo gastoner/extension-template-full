@@ -9,7 +9,7 @@ function load(): Record<string, boolean> {
   }
 }
 
-let states: Record<string, boolean> = $state(load());
+const states: Record<string, boolean> = $state(load());
 
 export function getExpanded(key: string, defaultValue = true): boolean {
   return states[key] ?? defaultValue;

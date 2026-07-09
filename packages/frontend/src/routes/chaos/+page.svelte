@@ -1,5 +1,5 @@
 <script lang="ts">
-import ChaosLab from '../../chaos/ChaosLab.svelte';
+import ChaosLab from '../../chaos/dashboard/ChaosLab.svelte';
 </script>
 
 <ChaosLab />

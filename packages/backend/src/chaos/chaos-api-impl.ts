@@ -17,6 +17,9 @@
  ***********************************************************************/
 
 import * as extensionApi from '@podman-desktop/api';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type {
   AffectedContainerState,
   ChaosApi,
@@ -33,6 +36,9 @@ import type {
 } from '/@shared/src/ChaosApi';
 import type { ChaosEngine } from './chaos-engine';
 import type { ContainerService } from '../container-service';
+import { ScenarioSchema, parsePersistedArray } from './persistence-schemas';
+
+const SCENARIO_EXPORT_FILE_NAME = 'chaos-scenarios.json';
 
 export class ChaosApiImpl implements ChaosApi {
   private notificationsEnabled = true;
@@ -49,9 +55,9 @@ export class ChaosApiImpl implements ChaosApi {
   private notify(message: string, warn = false): void {
     if (!this.notificationsEnabled) return;
     if (warn) {
-      void extensionApi.window.showWarningMessage(message);
+      void extensionApi.window.showWarningMessage(message, 'OK');
     } else {
-      void extensionApi.window.showInformationMessage(message);
+      void extensionApi.window.showInformationMessage(message, 'OK');
     }
   }
 
@@ -144,13 +150,85 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   async toggleScenario(id: string, enabled: boolean): Promise<void> {
-    this.engine.scheduler.toggleScenario(id, enabled);
+    await this.engine.scheduler.toggleScenario(id, enabled);
     await this.engine.scheduler.save();
+
+    const scenario = this.engine.scheduler.listScenarios().find(s => s.id === id);
+    if (!scenario) return;
+    this.notify(
+      enabled
+        ? `Scenario '${scenario.name}' started`
+        : `Scenario '${scenario.name}' stopped and its active attacks reverted`,
+      true,
+    );
   }
 
   async runScenarioOnce(id: string): Promise<void> {
     await this.engine.scheduler.runOnce(id);
     this.notify('Scenario executed', true);
+  }
+
+  async exportScenarios(ids?: string[]): Promise<void> {
+    const allScenarios = this.engine.scheduler.listScenarios();
+    const scenarios = ids ? allScenarios.filter(s => ids.includes(s.id)) : allScenarios;
+    if (scenarios.length === 0) {
+      this.notify('No scenarios to export', true);
+      return;
+    }
+
+    const defaultUri = extensionApi.Uri.file(path.join(os.homedir(), 'Documents', SCENARIO_EXPORT_FILE_NAME));
+
+    const target = await extensionApi.window.showSaveDialog({
+      defaultUri,
+      saveLabel: 'Export',
+      title: 'Export Chaos Scenarios',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (!target) return;
+
+    try {
+      await fs.promises.writeFile(target.fsPath, JSON.stringify(scenarios, undefined, 2), 'utf8');
+      this.notify(`Exported ${scenarios.length} scenario(s) to ${target.fsPath}`);
+    } catch (err) {
+      this.notify(`Failed to export scenarios: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  }
+
+  async importScenarios(): Promise<void> {
+    const defaultUri = extensionApi.Uri.file(path.join(os.homedir(), 'Documents'));
+
+    const selection = await extensionApi.window.showOpenDialog({
+      defaultUri,
+      openLabel: 'Import',
+      title: 'Import Chaos Scenarios',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (!selection || selection.length === 0) return;
+
+    let scenarios: Scenario[];
+    try {
+      const raw = await fs.promises.readFile(selection[0].fsPath, 'utf8');
+      scenarios = parsePersistedArray(JSON.parse(raw), ScenarioSchema, 'imported scenarios file');
+    } catch (err) {
+      this.notify(`Failed to read scenarios file: ${err instanceof Error ? err.message : String(err)}`, true);
+      return;
+    }
+
+    if (scenarios.length === 0) {
+      this.notify('No valid scenarios found in the selected file', true);
+      return;
+    }
+
+    for (const scenario of scenarios) {
+      // Always mint a fresh id and start disabled: imported scenarios are treated as new
+      // additions rather than overwrites of anything already scheduled, and shouldn't start
+      // firing attacks on an interval before the user has had a chance to review them.
+      scenario.id = crypto.randomUUID();
+      scenario.enabled = false;
+      this.engine.scheduler.addScenario(scenario);
+    }
+    await this.engine.scheduler.save();
+    this.notify(`Imported ${scenarios.length} scenario(s)`);
   }
 
   async applyNetworkRule(rule: NetworkRule): Promise<void> {
@@ -201,18 +279,17 @@ export class ChaosApiImpl implements ChaosApi {
     return this.containerService.checkToolAvailability(containerId, tool);
   }
 
-  async installContainerTool(containerId: string, tool: string): Promise<void> {
+  async detectPackageManagers(containerId: string): Promise<string[]> {
+    return this.detectAllPackageManagers(containerId);
+  }
+
+  async installContainerTool(containerId: string, tool: string, packageManager: string): Promise<void> {
     if (!TOOL_PACKAGES[tool]) {
       throw new Error(`Unknown tool '${tool}'. Supported: ${Object.keys(TOOL_PACKAGES).join(', ')}`);
     }
 
-    const pm = await this.detectPackageManager(containerId);
-    if (!pm) {
-      throw new Error(`Could not detect a package manager (apt-get, dnf, yum, apk, microdnf) in the container.`);
-    }
-
-    const pkg = this.resolvePackageName(tool, pm);
-    const installCmd = this.buildInstallCommand(pm, pkg);
+    const pkg = this.resolvePackageName(tool, packageManager);
+    const installCmd = this.buildInstallCommand(packageManager, pkg);
     await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', installCmd]);
   }
 
@@ -249,7 +326,24 @@ export class ChaosApiImpl implements ChaosApi {
   }
 
   async revertContainer(containerId: string): Promise<void> {
-    await this.engine.stopAll();
+    const state = this.engine.getState();
+
+    if (state.isolations[containerId]) {
+      await this.engine.isolator.restore(containerId);
+    }
+    if (state.networkRules[containerId]) {
+      await this.engine.networkShaper.removeRule(containerId);
+    }
+    if (state.resourceLimits[containerId]) {
+      await this.engine.resourceLimiter.removeLimit(containerId);
+    }
+    if (state.stressInjections[containerId]) {
+      await this.engine.stressInjector.stop(containerId);
+    }
+    if (state.configSabotages[containerId]) {
+      await this.engine.configSaboteur.restore(containerId);
+    }
+
     const entry = this.engine.affectedRegistry.getEntry(containerId);
     if (!entry) return;
 
@@ -289,40 +383,32 @@ export class ChaosApiImpl implements ChaosApi {
       }
     }
 
-    this.engine.affectedRegistry.clearContainer(containerId);
+    await this.engine.affectedRegistry.clearContainer(containerId);
     this.notify(`Container ${entry.containerName} reverted to default state`);
   }
 
   async revertAllContainers(): Promise<void> {
+    // Equivalent to clicking "Restore" on every affected container card: reverts each
+    // container individually via revertContainer() rather than taking an engine-wide
+    // shortcut, so the two code paths can never drift out of sync with each other.
     const affected = this.engine.affectedRegistry.getAffected();
-    await this.engine.stopAll();
     for (const entry of affected) {
       await this.revertContainer(entry.containerId);
     }
-    this.engine.affectedRegistry.clear();
     this.notify('All affected containers reverted to default state');
   }
 
-  async enableChaosMode(intervalSec: number): Promise<void> {
-    await this.engine.enableChaosMode(intervalSec);
-    this.notify(`CHAOS MODE enabled — killing a random container every ${intervalSec}s`, true);
-  }
-
-  async disableChaosMode(): Promise<void> {
-    this.engine.disableChaosMode();
-    this.notify('Chaos Mode disabled');
-  }
-
-  private async detectPackageManager(containerId: string): Promise<string | undefined> {
+  private async detectAllPackageManagers(containerId: string): Promise<string[]> {
+    const found: string[] = [];
     for (const pm of ['apt-get', 'dnf', 'microdnf', 'yum', 'apk']) {
       try {
         await extensionApi.process.exec('podman', ['exec', containerId, 'sh', '-c', `command -v ${pm}`]);
-        return pm;
+        found.push(pm);
       } catch {
         // not found, try next
       }
     }
-    return undefined;
+    return found;
   }
 
   private resolvePackageName(tool: string, pm: string): string {

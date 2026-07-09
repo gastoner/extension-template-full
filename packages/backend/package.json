@@ -53,66 +53,6 @@
           "type": "boolean",
           "default": true,
           "description": "Show toast notifications when chaos actions fire."
-        },
-        "chaos.machine.cpus": {
-          "type": "number",
-          "format": "cpu",
-          "minimum": 1,
-          "maximum": 16,
-          "default": 2,
-          "scope": "ContainerConnection",
-          "description": "CPU(s)"
-        },
-        "chaos.machine.memory": {
-          "type": "number",
-          "format": "memory",
-          "minimum": 536870912,
-          "default": 2147483648,
-          "maximum": 34359738368,
-          "scope": "ContainerConnection",
-          "description": "Memory"
-        },
-        "chaos.machine.diskSize": {
-          "type": "number",
-          "format": "diskSize",
-          "default": 21474836480,
-          "minimum": 10737418240,
-          "maximum": 536870912000,
-          "scope": "ContainerConnection",
-          "description": "Disk size"
-        },
-        "chaos.factory.machine.name": {
-          "type": "string",
-          "default": "chaos-default",
-          "scope": "ContainerProviderConnectionFactory",
-          "description": "Name"
-        },
-        "chaos.factory.machine.cpus": {
-          "type": "number",
-          "format": "cpu",
-          "default": 2,
-          "minimum": 1,
-          "maximum": 16,
-          "scope": "ContainerProviderConnectionFactory",
-          "description": "CPU(s)"
-        },
-        "chaos.factory.machine.memory": {
-          "type": "number",
-          "format": "memory",
-          "default": 2147483648,
-          "minimum": 536870912,
-          "maximum": 34359738368,
-          "scope": "ContainerProviderConnectionFactory",
-          "description": "Memory"
-        },
-        "chaos.factory.machine.diskSize": {
-          "type": "number",
-          "format": "diskSize",
-          "default": 21474836480,
-          "minimum": 10737418240,
-          "maximum": 536870912000,
-          "scope": "ContainerProviderConnectionFactory",
-          "description": "Disk size"
         }
       }
     }
@@ -146,5 +86,7 @@
     "vite": "8.0.16",
     "vitest": "^4.1.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
 }

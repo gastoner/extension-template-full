@@ -4,7 +4,7 @@
   "description": "Chaos engineering toolkit for Podman Desktop",
   "version": "1.4.0-next",
   "icon": "icon.png",
-  "publisher": "yourusername",
+  "publisher": "podman-desktop",
   "private": true,
   "engines": {
     "node": ">=24.0.0",
@@ -29,11 +29,11 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,svelte}": [
+    "*.ts": [
       "eslint --cache --fix",
       "prettier --write"
     ],
-    "*.{css,json,md}": "prettier --write"
+    "*.{css,json,md,svelte}": "prettier --write"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.0",

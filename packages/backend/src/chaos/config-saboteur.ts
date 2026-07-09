@@ -16,26 +16,83 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import fs from 'node:fs';
+import path from 'node:path';
 import * as extensionApi from '@podman-desktop/api';
 import type { ConfigSabotage, SabotageType } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { AffectedRegistry } from './affected-registry';
+import { PersistedSabotageSchema, parsePersistedArray } from './persistence-schemas';
 
 interface SabotageEntry {
   sabotage: ConfigSabotage;
   originalContent: string;
-  targetFile: string;
+}
+
+interface PersistedSabotage {
+  sabotage: ConfigSabotage;
 }
 
 export class ConfigSaboteur {
   private activeSabotages: Map<string, SabotageEntry> = new Map();
   private safePatterns: RegExp[] = [];
   private registry: AffectedRegistry | undefined;
+  private secretStorage: extensionApi.SecretStorage | undefined;
+  private storagePath: string | undefined;
+  private readonly fileName = 'config-sabotages.json';
 
   constructor(private readonly containerService: ContainerService) {}
 
   setRegistry(registry: AffectedRegistry): void {
     this.registry = registry;
+  }
+
+  setSecretStorage(secretStorage: extensionApi.SecretStorage): void {
+    this.secretStorage = secretStorage;
+  }
+
+  setStoragePath(storagePath: string): void {
+    this.storagePath = storagePath;
+  }
+
+  private secretKey(containerId: string): string {
+    return `config-sabotage.${containerId}`;
+  }
+
+  async save(): Promise<void> {
+    if (!this.storagePath) return;
+    try {
+      await fs.promises.mkdir(this.storagePath, { recursive: true });
+      const filePath = path.join(this.storagePath, this.fileName);
+      const entries: PersistedSabotage[] = Array.from(this.activeSabotages.values()).map(({ sabotage }) => ({
+        sabotage,
+      }));
+      await fs.promises.writeFile(filePath, JSON.stringify(entries, undefined, 2), 'utf8');
+    } catch (err) {
+      console.warn('Failed to save config sabotages:', err);
+    }
+  }
+
+  async load(): Promise<void> {
+    if (!this.storagePath) return;
+    const filePath = path.join(this.storagePath, this.fileName);
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const entries = parsePersistedArray(JSON.parse(raw), PersistedSabotageSchema, this.fileName);
+      this.activeSabotages.clear();
+      for (const { sabotage } of entries) {
+        const originalContent = await this.secretStorage?.get(this.secretKey(sabotage.containerId));
+        if (originalContent === undefined) {
+          console.warn(
+            `Skipping stale config sabotage for ${sabotage.containerId}: original content not found in secret storage`,
+          );
+          continue;
+        }
+        this.activeSabotages.set(sabotage.containerId, { sabotage, originalContent });
+      }
+    } catch {
+      // file doesn't exist or is malformed — start fresh
+    }
   }
 
   setSafePatterns(patterns: string[]): void {
@@ -64,8 +121,6 @@ export class ConfigSaboteur {
     if (target && this.isSafe(target.name)) {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
-
-    await this.registry?.markAffected(containerId, `config-${type}`);
 
     if (this.activeSabotages.has(containerId)) {
       await this.restore(containerId);
@@ -101,8 +156,13 @@ export class ConfigSaboteur {
     this.activeSabotages.set(containerId, {
       sabotage: { containerId, containerName, type, targetFile: filePath, startedAt: Date.now() },
       originalContent,
-      targetFile: filePath,
     });
+    await this.secretStorage?.store(this.secretKey(containerId), originalContent);
+    await this.save();
+    // Marked as affected only now that the sabotage actually succeeded and is tracked
+    // in-memory — otherwise a failure above (e.g. exec failing) would leave a phantom entry
+    // in the registry that the dashboard shows but no subsystem can revert.
+    await this.registry?.markAffected(containerId, `config-${type}`);
 
     console.log(`Config sabotage (${type}) applied to ${containerName}: ${filePath}`);
   }
@@ -112,21 +172,23 @@ export class ConfigSaboteur {
     if (!entry) return;
 
     try {
-      const escaped = entry.originalContent.replace(/'/g, "'\\''");
+      const escaped = entry.originalContent.replace(/'/g, `'\\''`);
       await extensionApi.process.exec('podman', [
         'exec',
         containerId,
         'sh',
         '-c',
-        `printf '%s' '${escaped}' > ${entry.targetFile}`,
+        `printf '%s' '${escaped}' > ${entry.sabotage.targetFile}`,
       ]);
     } catch (err) {
-      console.warn(`Failed to restore ${entry.targetFile} in ${containerId}:`, err);
+      console.warn(`Failed to restore ${entry.sabotage.targetFile} in ${containerId}:`, err);
     }
 
     const sabotageType = entry.sabotage.type;
     this.activeSabotages.delete(containerId);
-    this.registry?.removeAttack(containerId, `config-${sabotageType}`);
+    await this.secretStorage?.delete(this.secretKey(containerId));
+    await this.save();
+    await this.registry?.removeAttack(containerId, `config-${sabotageType}`);
     console.log(`Config restored for ${containerId}`);
   }
 

@@ -1,10 +1,10 @@
 <script lang="ts">
 import { Button, Dropdown, ErrorMessage, Tooltip, Expandable } from '@podman-desktop/ui-svelte';
 import { faFire } from '@fortawesome/free-solid-svg-icons';
-import * as chaos from '../api/chaos-store.svelte';
+import * as chaos from '../stores/chaos-store.svelte';
 import SliderNumberInput from '../lib/SliderNumberInput.svelte';
 import { getExpanded, setExpanded } from '../lib/expandable-state.svelte';
-import type { ContainerHealth, StressInjection, StressType } from '/@shared/src/ChaosApi';
+import type { ContainerHealth, StressInjection, StressType } from '../../../shared/src/ChaosApi';
 
 let containers: ContainerHealth[] = $derived(await chaos.getContainerHealth());
 let activeInjections: StressInjection[] = $derived(await chaos.listStressInjections());
@@ -107,7 +107,7 @@ function formatElapsed(startedAt: number): string {
             {/if}
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target Container</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target Container</span>
               <Dropdown
                 bind:value={selectedContainer}
                 options={containerOptions}
@@ -116,7 +116,7 @@ function formatElapsed(startedAt: number): string {
             </div>
 
             <div>
-              <span class="block text-xs text-[var(--pd-content-text)] mb-1">Stress Type</span>
+              <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Stress Type</span>
               <Dropdown bind:value={stressType} options={stressTypeOptions} ariaLabel="Stress type" />
               <p class="mt-2 text-xs text-[var(--pd-content-text)] opacity-70">
                 {stressDescriptions[stressType]}
@@ -124,29 +124,28 @@ function formatElapsed(startedAt: number): string {
             </div>
 
             {#if stressType === 'cpu'}
-              <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Workers (parallel loops)</span>
+              <div class="w-1/2">
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]"
+                  >Workers (parallel loops)</span>
                 <SliderNumberInput bind:value={workers} minimum={1} maximum={16} step={1} label="Workers" />
               </div>
             {/if}
             {#if stressType === 'memory'}
-              <div>
-                <span class="block text-xs text-[var(--pd-content-text)] mb-1">Target (MB)</span>
+              <div class="w-1/2">
+                <span class="block mb-1 text-sm font-medium text-[var(--pd-content-text)]">Target (MB)</span>
                 <SliderNumberInput bind:value={targetMb} minimum={16} maximum={4096} step={16} label="Target MB" />
               </div>
             {/if}
 
-            <div class="w-full flex flex-row space-x-4 pt-4 border-t-2 border-[var(--pd-content-divider)]">
-              <Button type="danger" class="w-full" onclick={inject} icon={faFire}>Inject Stress</Button>
-            </div>
+            <Button type="danger" class="w-full" onclick={inject} icon={faFire}>Inject Stress</Button>
 
             {#if activeInjections.length > 0}
               <div class="pt-4">
                 <h2 class="text-xl pt-2 grow mb-3">Active Injections</h2>
-                <div class="space-y-2">
+                <div class="space-y-1.5">
                   {#each activeInjections as injection}
                     <div
-                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] p-4 transition-colors">
+                      class="flex items-center justify-between rounded-lg bg-[var(--pd-content-card-hover-bg)] border border-[var(--pd-status-degraded)] p-2.5 transition-colors">
                       <div class="flex items-center gap-4 text-sm">
                         <span class="font-medium text-[var(--pd-content-header)]">
                           {injection.containerName}

@@ -16,20 +16,56 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import fs from 'node:fs';
+import path from 'node:path';
 import * as extensionApi from '@podman-desktop/api';
 import type { NetworkRule } from '/@shared/src/ChaosApi';
 import type { ContainerService } from '../container-service';
 import type { AffectedRegistry } from './affected-registry';
+import { NetworkRuleSchema, parsePersistedArray } from './persistence-schemas';
 
 export class NetworkShaper {
   private activeRules: Map<string, NetworkRule> = new Map();
   private safePatterns: RegExp[] = [];
   private registry: AffectedRegistry | undefined;
+  private storagePath: string | undefined;
+  private readonly fileName = 'network-rules.json';
 
   constructor(private readonly containerService: ContainerService) {}
 
   setRegistry(registry: AffectedRegistry): void {
     this.registry = registry;
+  }
+
+  setStoragePath(storagePath: string): void {
+    this.storagePath = storagePath;
+  }
+
+  async save(): Promise<void> {
+    if (!this.storagePath) return;
+    try {
+      await fs.promises.mkdir(this.storagePath, { recursive: true });
+      const filePath = path.join(this.storagePath, this.fileName);
+      const data = JSON.stringify(Array.from(this.activeRules.values()), undefined, 2);
+      await fs.promises.writeFile(filePath, data, 'utf8');
+    } catch (err) {
+      console.warn('Failed to save network rules:', err);
+    }
+  }
+
+  async load(): Promise<void> {
+    if (!this.storagePath) return;
+    const filePath = path.join(this.storagePath, this.fileName);
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const rules = parsePersistedArray(JSON.parse(raw), NetworkRuleSchema, this.fileName);
+      this.activeRules.clear();
+      for (const rule of rules) {
+        this.activeRules.set(rule.containerId, rule);
+      }
+    } catch {
+      // file doesn't exist or is malformed — start fresh
+    }
   }
 
   setSafePatterns(patterns: string[]): void {
@@ -61,8 +97,6 @@ export class NetworkShaper {
     if (target && this.isSafe(target.name)) {
       throw new Error(`Container '${target.name}' is in the safe list and cannot be targeted.`);
     }
-
-    await this.registry?.markAffected(rule.containerId, 'network-shape');
 
     const hasTc = await this.containerService.checkToolAvailability(rule.containerId, 'tc');
     if (!hasTc) {
@@ -105,6 +139,11 @@ export class NetworkShaper {
     }
 
     this.activeRules.set(rule.containerId, rule);
+    await this.save();
+    // Marked as affected only now that the rule is actually applied and tracked in-memory —
+    // otherwise a failure above (e.g. missing tc) would leave a phantom entry in the registry
+    // that the dashboard shows but no subsystem can revert.
+    await this.registry?.markAffected(rule.containerId, 'network-shape');
     console.log(`Network shaping applied to ${rule.containerId}`);
   }
 
@@ -135,7 +174,8 @@ export class NetworkShaper {
     }
 
     this.activeRules.delete(containerId);
-    this.registry?.removeAttack(containerId, 'network-shape');
+    await this.save();
+    await this.registry?.removeAttack(containerId, 'network-shape');
     console.log(`Network shaping removed from ${containerId}`);
   }
 
